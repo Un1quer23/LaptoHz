@@ -1,8 +1,10 @@
 # LaptoHz
 
+**语言：** 简体中文 | [English](README.en.md)
+
 笔记本内屏刷新率切换工具，支持按供电自动切换、切换前确认和手动选档。
 
-Windows 11 x64 内屏刷新率切换工具，当前版本 **0.3.0-beta.5**。按 Windows 报告的内屏物理能力检测档位，可用于不同品牌笔记本；这是通用测试版，已实测机型和待验收范围见 [适配记录](docs/laptop-compatibility.md) 与 [验证记录](VALIDATION.md)。本版补充切换失败后的恢复结果校验，明确区分恢复已验证、请求失败、回读未通过、操作取消和环境变化；沿用三个模式、确认流程、9 秒结果提示、物理档位筛选及当前托盘图标。本机 ThinkBook 的目标和手动选项均为 60／240Hz。
+Windows 11 x64 内屏刷新率切换工具，当前版本 **0.3.0-beta.5**。按 Windows 报告的内屏物理能力检测档位，可用于不同品牌笔记本；这是通用测试版，已实测机型和待验收范围见 [适配记录](docs/laptop-compatibility.md) 与 [验证记录](VALIDATION.md)。本版补充切换失败后的恢复结果校验，明确区分恢复已验证、请求失败、回读未通过、操作取消和环境变化；沿用三个模式、确认流程、9 秒结果提示、物理档位筛选及当前托盘图标。
 
 | 模式 | 行为 |
 |---|---|
@@ -10,11 +12,13 @@ Windows 11 x64 内屏刷新率切换工具，当前版本 **0.3.0-beta.5**。按
 | 确认 | 实际供电状态变化后询问，确认才切换 |
 | 手动 | 主动选择刷新率，电源变化和唤醒不覆盖 |
 
-默认插电使用**最高可用档位**；电池优先 **60Hz**，其次 59Hz。两者都不存在时，选择最低的 ≥60Hz 档位；全部低于 60Hz 时选择最高档。ThinkBook 16p 2025 默认仍为插电 240Hz、电池 60Hz。其他面板实际支持 30／48Hz 且通过校验时，仍可手动选择或设为目标。
+默认插电使用**最高可用档位**；电池优先 **60Hz**，其次 59Hz。两者都不存在时，选择最低的 ≥60Hz 档位；全部低于 60Hz 时选择最高档。检测到且通过校验的其他物理档位，也可手动选择或设为目标。
 
 ## 使用
 
 把 EXE 放在固定目录后双击运行，无需管理员权限或额外 C++ 运行库。首次运行默认开启当前用户登录自启。图标可能在任务栏隐藏图标区域。
+
+当前程序界面为简体中文；英文 README 中的菜单名称用于说明。
 
 **左右键打开同一个托盘菜单**，顶部显示当前刷新率、供电状态和模式。桌面刷新率与实际信号不同时分别显示，例如 `30Hz（信号 60Hz）`。方向键、Enter、Esc 可操作；点击外部关闭。菜单、确认窗和结果提示跟随 Windows 应用深浅色，高对比度使用系统配色。字母、数字快捷选择已移除。
 
@@ -38,7 +42,7 @@ Windows 11 x64 内屏刷新率切换工具，当前版本 **0.3.0-beta.5**。按
 | 自动／确认／手动模式 | 互斥选择，跨程序重启保存 |
 | 插电目标 | 子菜单选择“默认：最高可用”或当前有效档位 |
 | 电池目标 | 子菜单选择“默认：优先 60Hz”或当前有效档位 |
-| 手动刷新率 | 本机实际支持且通过驱动校验的档位直接显示在主菜单中 |
+| 手动刷新率 | 当前内屏支持且通过驱动校验的档位直接显示在主菜单中 |
 | 登录 Windows 时自动运行 | 开关当前用户登录自启 |
 | 查看诊断日志 | 用系统记事本打开本地运行和排障记录 |
 | 退出 | 保留当前刷新率，结束程序 |
@@ -57,7 +61,7 @@ Windows 11 x64 内屏刷新率切换工具，当前版本 **0.3.0-beta.5**。按
 
 只处理一个可明确识别的内屏。使用当前分辨率、色深、方向等参数相同的兼容模式，核对 Windows 图形内核的物理／虚拟模式标记，经 `CDS_TEST` 校验后才提供物理档位；不启用原始模式枚举，不创建超频或自定义显示模式。Windows 的整数标称 Hz 用于选档，实际信号 Hz 单独回读，兼容 59.94、119.88 等分数频率和驱动取整报告。能力接口读取失败时暂停切换并记录原因，不退回未经确认的虚拟列表。
 
-Windows 11 可能枚举出低于实际信号的虚拟桌面档位，即使 `CDS_TEST` 也会接受这些模式。本机驱动将 30／48／120Hz 标为虚拟档位，本版将它们排除，只提供物理 60／240Hz。这来自本机能力检测，不是品牌白名单或固定两档限制。外部工具选择虚拟档位后，状态仍分别显示桌面和信号；旧配置中的虚拟目标会保留并标为暂不可用。切换结果必须同时满足桌面档位和物理信号校验。DRR 开启时仍不切换。[微软模式标记说明](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmthk/ns-d3dkmthk-_d3dkmdt_displaymode_flags)
+可选档位由当前内屏、分辨率及驱动能力决定。虚拟桌面档位不会作为切换目标；外部工具选择此类档位后，状态仍分别显示桌面和信号。旧配置中的虚拟目标会保留并标为暂不可用。切换结果必须同时满足桌面档位和物理信号校验。DRR 开启时仍不切换。[微软模式标记说明](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmthk/ns-d3dkmthk-_d3dkmdt_displaymode_flags)
 
 切换只改变刷新率；回读验证分辨率、色深、方向、排列、缩放和高级颜色状态。目标回读不符时，仅在操作未取消、原内屏输出路径与显示能力仍匹配的前提下，请求恢复原模式一次。恢复接口成功后立即回读，最多 4 次、间隔 150ms；分别核对操作前的标称、桌面和物理信号频率，以及上述周围参数。实际频率采用 0.1Hz 容差，整数取整别名须有分数信号证据；原状态的桌面／信号差异分别保留，未知或无效频率不能判为恢复成功。取消或环境变化时停止校验并记录原因。驱动可能使屏幕短暂黑屏。
 
@@ -102,7 +106,7 @@ Battery=auto
 .\LaptoHz.exe --mode auto
 ```
 
-`--switch <整数Hz>` 要求已经进入手动模式，且档位当前可用；60／240 等旧命令继续有效。当前档位只刷新状态，不重复应用或弹多余提示。`--pause` 进入手动，`--resume` 进入自动；`--status` 显示状态，`--exit` 退出，`--version` 输出版本。
+`--switch <整数Hz>` 要求已经进入手动模式，且目标档位当前可用。当前档位只刷新状态，不重复应用或弹多余提示。`--pause` 进入手动，`--resume` 进入自动；`--status` 显示状态，`--exit` 退出，`--version` 输出版本。
 
 控制应答超时为三秒。返回码：0 已采用模式／接受切换请求；1 未运行、未响应或旧版本不支持；2 参数格式错误；3 诊断文件写入失败；4 非手动、忙碌、目标／会话不可用或控制被拒绝；5 模式已采用但保存失败。最终切换结果仍通过提示和日志反馈。
 
@@ -110,7 +114,7 @@ Battery=auto
 
 ## 开发与验证
 
-使用 C++20、CMake、Win32 API。MSVC 环境运行 `scripts/build.ps1`；便携 LLVM-MinGW 环境先运行 `scripts/bootstrap.ps1`，再运行 `scripts/build.ps1 -Portable`。工具链位于被忽略的 `.tools`，不改系统 PATH；输出为 `dist/LaptoHz/LaptoHz.exe`，同目录包含说明、适配记录、工具链许可和 SHA256。
+使用 C++20、CMake、Win32 API。MSVC 环境运行 `scripts/build.ps1`；便携 LLVM-MinGW 环境先运行 `scripts/bootstrap.ps1`，再运行 `scripts/build.ps1 -Portable`。工具链位于被忽略的 `.tools`，不改系统 PATH；输出为 `dist/LaptoHz/LaptoHz.exe`，同目录包含中英文说明、适配记录、MIT 许可证、工具链许可和 SHA256。
 
 ```powershell
 .\scripts\bootstrap.ps1
@@ -129,7 +133,7 @@ Battery=auto
 .\build\portable-release\display_smoke_test.exe --switch
 ```
 
-`runtime_smoke_test.exe` 和 `scripts/validate-modes.ps1` 是 **ThinkBook 专项回归**，要求物理 60／240Hz，包含真实切换及模拟系统通知，结束时进入自动模式并恢复 240Hz；后者另外检查虚拟档位不能通过控制命令提交。`scripts/validate-runtime.ps1` 检查自启开关、快捷方式启动与空闲开销，会改变自启选择，不注销或重启 Windows。真实插拔、睡眠、重登、多屏、混合 DPI、HDR／游戏及其他笔记本仍须分别记录人工验收。
+`scripts/validate-runtime.ps1` 检查自启开关、快捷方式启动与空闲开销，会改变自启选择，不注销或重启 Windows。真实插拔、睡眠、重登、多屏、混合 DPI、HDR／游戏及其他笔记本仍须分别记录人工验收。
 
 ## 实现依据
 
@@ -142,3 +146,7 @@ Battery=auto
 - [Windows 主题](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-windows-themes)、[菜单自绘](https://learn.microsoft.com/en-us/windows/win32/menurc/using-menus#creating-owner-drawn-menu-items)
 - [文件实际路径查询](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew)、[Shell 快捷方式](https://learn.microsoft.com/en-us/windows/win32/shell/links)
 - [LLVM-MinGW](https://github.com/mstorsjo/llvm-mingw)、[CMake](https://cmake.org/)、[Ninja](https://ninja-build.org/)
+
+## 许可证
+
+LaptoHz 使用 [MIT 许可证](LICENSE)。第三方工具链及组件保留各自的许可声明，参见 [LLVM-MinGW 许可](licenses/LLVM-MinGW-LICENSE.txt)。
