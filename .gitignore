@@ -1,0 +1,8 @@
+build/
+dist/
+.tools/
+.vs/
+*.user
+*.log
+autoresearch/
+**/autoresearch/
