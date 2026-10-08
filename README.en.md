@@ -4,7 +4,7 @@
 
 A laptop internal-display refresh rate utility with automatic switching based on power source, confirmation before switching, and manual rate selection.
 
-LaptoHz targets Windows 11 x64. The current version is **0.3.0-beta.5**. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. This is a general beta; tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). This version verifies recovery after a failed switch, distinguishing verified recovery, request failure, failed readback verification, cancellation, and environment changes. It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, and current tray icons.
+LaptoHz targets Windows 11 x64. The current version is **0.3.0-beta.5**. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. This is a general beta; tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). This version verifies recovery after a failed switch, distinguishing verified recovery, request failure, failed readback verification, cancellation, and environment changes. It also fixes duplicate status explanations and overlapping target-submenu arrows. It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, and current tray icons.
 
 | Mode | Behavior |
 |---|---|
@@ -15,6 +15,8 @@ LaptoHz targets Windows 11 x64. The current version is **0.3.0-beta.5**. It dete
 The default AC target is the **highest available rate**. On battery, the default prefers **60Hz**, then 59Hz. If neither exists, it selects the lowest available rate at or above 60Hz; if all rates are below 60Hz, it selects the highest. Other detected and validated physical rates can also be selected manually or configured as targets.
 
 ## Usage
+
+Download `LaptoHz-0.3.0-beta.5-win-x64.zip` from the [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.3.0-beta.5), extract it, and run `LaptoHz/LaptoHz.exe`. The release includes a `.sha256` checksum for the ZIP; `SHA256SUMS.txt` inside the package lists the SHA256 of each file.
 
 Put the EXE in a fixed directory and double-click it. Administrator privileges and an additional C++ runtime are not required. The first run enables startup at sign-in for the current user by default. The tray icon may be in the taskbar's hidden-icons area.
 

@@ -108,3 +108,14 @@ ThinkBook 16p 2025，Windows 11 x64；便携 LLVM-MinGW／CMake／Ninja 的 x64 
 - 当前旧名称驻留副本应用相同菜单修复，版本仍为 beta.5；保留原名称、图标、自动模式、配置及自启快捷方式。升级后一个驻留实例，配置与快捷方式哈希不变，只读显示诊断与升级前一致。
 
 证据保存在被忽略的 `build/submenu-arrow-fix/`，包括修复前截图、`CTest-related.log`、`CTest-menu-recheck.log`、`CTest-hints-recheck.log` 和 `installed.json`。最终界面截图位于 `build/portable-release/menu-captures/`，包括普通、禁用和选中目标箭头。
+
+## GitHub beta.5 发布构建
+
+日期：2026-10-08。首个 GitHub 预发布沿用版本 **0.3.0-beta.5**／**0.3.0.5**，包含恢复结果校验、状态栏重复说明修复及子菜单箭头叠影修复。
+
+- `scripts/build.ps1 -Portable` 的 x64 Release 构建与完整 CTest 完成：**11 项通过、1 项跳过、无失败，67.87 秒，共 1017 个断言**。原生界面为 120 DPI。跳过项为 `display_read_only`，原因是当前会话没有活动内屏；本轮没有执行真实刷新率切换。前文 2026-10-06 的 60／240Hz 结果保留为历史硬件验收，恢复失败分支仍属于后端注入验证。
+- 发布 EXE 使用 LaptoHz 名称。检查命令行版本、预发布版本资源、x64 架构、嵌入清单版本及 DPI 声明，并核对 EXE 与通过测试的构建一致；说明、许可和适配记录与源码逐文件匹配。
+- 发布目录 `dist/LaptoHz`；ZIP 为 `dist/LaptoHz-0.3.0-beta.5-win-x64.zip`，另附 `.zip.sha256`。包内以 `LaptoHz/` 为根目录，共 9 个文件，含每文件 SHA256 清单；检查相对路径、重复条目和每个条目解压后的内容哈希。
+- 当前旧名称驻留及自启副本继续保持上一节已验证的状态。历史 RefreshRateSwitcher ZIP 保留。
+
+本轮构建、CTest、版本和包完整性证据保存在被忽略的 `build/github-release-beta5/`。Release 标签为 `v0.3.0-beta.5`，发布说明明确区分本轮模拟／界面测试与历史实机结果。
