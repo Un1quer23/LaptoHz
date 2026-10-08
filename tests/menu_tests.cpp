@@ -29,6 +29,13 @@ LRESULT CALLBACK MenuOwner(HWND window, UINT message, WPARAM wparam, LPARAM lpar
         }
         return 0;
     }
+    if (message == WM_APP+51 && live_state && live_menu) {
+        live_state->busy = wparam != 0; UpdateTrayMenu(live_menu,*live_state);
+        if (HWND menu_window = FindTrayMenuWindow(window,live_menu)) {
+            InvalidateRect(menu_window,nullptr,TRUE); UpdateWindow(menu_window);
+        }
+        return 0;
+    }
     if (renderer && (message == WM_SETTINGCHANGE || message == WM_THEMECHANGED || message == WM_SYSCOLORCHANGE)) {
         renderer->RefreshAppearance(TestAppearance()); return 0;
     }
@@ -52,6 +59,34 @@ bool Capture(HWND window, const std::filesystem::path& path) {
         Gdiplus::GdiplusShutdown(token);
     }
     DeleteObject(bitmap); DeleteDC(buffer); ReleaseDC(window,dc); return saved;
+}
+bool ArrowPalette(HWND owner, HMENU menu, int position, Appearance appearance) {
+    const HWND window = FindTrayMenuWindow(owner,menu);
+    RECT area{}, client{};
+    if (!window || !GetMenuItemRect(owner,menu,position,&area) || !GetClientRect(window,&client)) return false;
+    MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&area),2);
+    const UINT state = GetMenuState(menu,position,MF_BYPOSITION);
+    const bool disabled = (state & (MF_GRAYED | MF_DISABLED)) != 0;
+    const bool selected = (state & MF_HILITE) && !disabled;
+    const auto colors = ColorsFor(appearance);
+    const COLORREF background = selected ? colors.hover : colors.background;
+    const COLORREF foreground = disabled ? colors.disabled : selected ? colors.hover_text : colors.text;
+    const int dpi = static_cast<int>(GetDpiForWindow(owner));
+    area.left = area.right-MulDiv(22,dpi,96); area.right -= MulDiv(2,dpi,96);
+    area.top += MulDiv(2,dpi,96); area.bottom -= MulDiv(2,dpi,96);
+    HDC dc = GetDC(window), buffer = CreateCompatibleDC(dc);
+    HBITMAP bitmap = CreateCompatibleBitmap(dc,client.right,client.bottom);
+    if (!buffer || !bitmap) { if (buffer) DeleteDC(buffer); if (bitmap) DeleteObject(bitmap); ReleaseDC(window,dc); return false; }
+    const auto previous = SelectObject(buffer,bitmap);
+    bool clean = PrintWindow(window,buffer,PW_CLIENTONLY) != FALSE;
+    int arrow_pixels = 0;
+    for (int y = area.top; y < area.bottom && clean; ++y) for (int x = area.left; x < area.right; ++x) {
+        const COLORREF pixel = GetPixel(buffer,x,y);
+        if (pixel == foreground) ++arrow_pixels;
+        else if (pixel != background) { clean = false; break; }
+    }
+    SelectObject(buffer,previous); DeleteObject(bitmap); DeleteDC(buffer); ReleaseDC(window,dc);
+    return clean && arrow_pixels >= 3;
 }
 }
 int main() {
@@ -176,6 +211,7 @@ int main() {
         MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor); GetMonitorInfoW(MonitorFromWindow(owner,MONITOR_DEFAULTTOPRIMARY),&monitor);
         const auto directory = std::filesystem::current_path()/L"menu-captures"; std::filesystem::create_directories(directory);
         bool captured = false, fits = false, light = false, dark = false, contrast = false, manual = false, idle_stable = false, theme_stable = false, hover_stable = true;
+        bool light_arrows = false, dark_arrows = false, contrast_arrows = false, disabled_arrows = false;
         std::thread driver([&] {
             const auto deadline = GetTickCount64()+3000; HWND window = nullptr;
             while (!(window = FindTrayMenuWindow(owner,menu)) && GetTickCount64() < deadline) Sleep(10);
@@ -202,11 +238,18 @@ int main() {
                 }
                 fits = rect.left >= monitor.rcWork.left && rect.top >= monitor.rcWork.top && rect.right <= monitor.rcWork.right && rect.bottom <= monitor.rcWork.bottom;
                 light = ClientPixel(window,10,10) == ColorsFor({false,false}).background && Capture(window,directory/L"light-menu.png");
+                light_arrows = ArrowPalette(owner,menu,6,{false,false}) && ArrowPalette(owner,menu,7,{false,false});
                 theme = 1; SendMessageW(owner,WM_SETTINGCHANGE,0,0);
                 dark = ActiveMenu(owner) == menu && ClientPixel(window,10,10) == ColorsFor({true,false}).background && Capture(window,directory/L"dark-menu.png");
+                dark_arrows = ArrowPalette(owner,menu,6,{true,false}) && ArrowPalette(owner,menu,7,{true,false});
                 theme = 2; SendMessageW(owner,WM_THEMECHANGED,0,0);
                 contrast = ActiveMenu(owner) == menu && ClientPixel(window,10,10) == GetSysColor(COLOR_WINDOW) && Capture(window,directory/L"contrast-menu.png");
+                contrast_arrows = ArrowPalette(owner,menu,6,{false,true}) && ArrowPalette(owner,menu,7,{false,true});
                 theme = 1; SendMessageW(owner,WM_SYSCOLORCHANGE,0,0);
+                SendMessageW(owner,WM_APP+51,1,0);
+                disabled_arrows = ArrowPalette(owner,menu,6,{true,false}) && ArrowPalette(owner,menu,7,{true,false}) &&
+                    Capture(window,directory/L"disabled-target-arrows.png");
+                SendMessageW(owner,WM_APP+51,0,0);
                 captured = Capture(window,directory/L"unified-menu.png");
                 SendMessageW(owner,WM_APP+50,0,0);
                 manual = !Enabled(menu,kMenu240) && Enabled(menu,kMenu60) &&
@@ -227,10 +270,12 @@ int main() {
         check(light,"The light menu renders a light background.");
         check(dark,"An open menu switches to a dark background after a settings message.");
         check(contrast,"An open menu uses system colors for high contrast.");
+        check(light_arrows && dark_arrows && contrast_arrows,"Both submenu arrows use the current theme without an extra native glyph or wrong-color pixels.");
+        check(disabled_arrows,"Disabled target arrows use the disabled color on the original menu background.");
         check(fits,"The native menu is constrained to the work area at the screen edge.");
         const HMENU ac_submenu = GetSubMenu(menu,6);
         const UINT configured60 = ActionCommand(menu,TrayActionKind::ac_target,60);
-        bool submenu_dark = false, submenu_light = false, submenu_contrast = false, submenu_fits = false, submenu_bounds = false, submenu_idle_stable = false;
+        bool submenu_dark = false, submenu_light = false, submenu_contrast = false, submenu_fits = false, submenu_bounds = false, submenu_idle_stable = false, selected_arrow = false;
         std::thread submenu_driver([&] {
             const auto deadline = GetTickCount64()+3000;
             while (!FindTrayMenuWindow(owner,menu) && GetTickCount64() < deadline) Sleep(10);
@@ -247,15 +292,22 @@ int main() {
             submenu_bounds = combined && combined->left <= rect.left && combined->right >= rect.right && combined->top <= rect.top && combined->bottom >= rect.bottom;
             submenu_fits = rect.left >= monitor.rcWork.left && rect.top >= monitor.rcWork.top && rect.right <= monitor.rcWork.right && rect.bottom <= monitor.rcWork.bottom;
             theme = 1; SendMessageW(owner,WM_THEMECHANGED,0,0);
-            const int sample_y = MulDiv(30,GetDpiForWindow(owner),96);
+            selected_arrow = (GetMenuState(menu,kMenuAcTarget,MF_BYCOMMAND) & MF_HILITE) &&
+                ArrowPalette(owner,menu,6,{true,false}) && Capture(FindTrayMenuWindow(owner,menu),directory/L"selected-target-arrow.png");
+            RECT rate_row{};
+            if (!GetMenuItemRect(owner,ac_submenu,2,&rate_row)) { MenuKey(owner,VK_ESCAPE); MenuKey(owner,VK_ESCAPE); return; }
+            // Probe the unselected 60Hz row, outside its text and marker. A
+            // fixed offset can fall inside the highlighted default row.
+            POINT sample{rate_row.left+10,(rate_row.top+rate_row.bottom)/2};
+            ScreenToClient(child,&sample);
             Capture(child,directory/L"dark-target-submenu.png");
-            submenu_dark = ClientPixel(child,10,sample_y) == ColorsFor({true,false}).background;
+            submenu_dark = ClientPixel(child,sample.x,sample.y) == ColorsFor({true,false}).background;
             theme = 0; SendMessageW(owner,WM_SETTINGCHANGE,0,0);
             Capture(child,directory/L"light-target-submenu.png");
-            submenu_light = ClientPixel(child,10,sample_y) == ColorsFor({false,false}).background;
+            submenu_light = ClientPixel(child,sample.x,sample.y) == ColorsFor({false,false}).background;
             theme = 2; SendMessageW(owner,WM_SYSCOLORCHANGE,0,0);
             Capture(child,directory/L"contrast-target-submenu.png");
-            submenu_contrast = ClientPixel(child,10,sample_y) == GetSysColor(COLOR_WINDOW);
+            submenu_contrast = ClientPixel(child,sample.x,sample.y) == GetSysColor(COLOR_WINDOW);
             if (!SelectMenuItem(owner,configured60,ac_submenu)) { MenuKey(owner,VK_ESCAPE); MenuKey(owner,VK_ESCAPE); }
         });
         const UINT configured = TrackPopupMenuEx(menu,TPM_RETURNCMD | TPM_NOANIMATION | TPM_WORKAREA,
@@ -263,6 +315,7 @@ int main() {
         submenu_driver.join();
         check(configured == configured60,"Arrows and Enter select a target from the native submenu.");
         check(submenu_dark && submenu_light && submenu_contrast,"Open target submenus follow light, dark and high contrast changes.");
+        check(selected_arrow,"Keyboard expansion retains a clean arrow on the selected parent row.");
         check(submenu_fits,"A target submenu fits inside the monitor work area.");
         check(submenu_bounds,"Popup avoidance includes the open target submenu.");
         check(submenu_idle_stable,"Root and target submenu windows are not repainted by repeated hover/idle messages.");

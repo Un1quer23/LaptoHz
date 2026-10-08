@@ -57,6 +57,10 @@ private:
     Palette colors_ = ColorsFor({});
     Appearance appearance_;
     std::vector<std::pair<HWND,HMENU>> styled_windows_;
+    std::vector<HWND> subclassed_windows_;
+    static LRESULT CALLBACK MenuWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR id, DWORD_PTR data);
+    void DrawSubmenuArrows(HWND window, HDC dc) const;
+    void QueueArrowPaint() const;
     void StyleVisibleWindows(bool repaint);
     std::vector<Row> rows_;
 };

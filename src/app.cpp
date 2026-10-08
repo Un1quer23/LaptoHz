@@ -28,14 +28,15 @@ int Priority(Trigger trigger) {
     }
     return 0;
 }
-std::wstring Summary(const Update* status, Mode mode, bool saved) {
+std::wstring Summary(const Update* status, Mode mode, bool saved, bool include_availability_reason = true) {
     std::wstring mode_text = ModeText(mode);
     if (!saved) mode_text += L" · 设置未保存";
     if (!status) return L"正在读取显示状态 · "+mode_text;
     std::wstring text = status->snapshot.policy.screen ? CurrentRateText(*status->snapshot.policy.screen) : L"内屏暂不可用";
     text += L" · "+PowerText(status->snapshot.policy.power)+L" · "+mode_text;
     if (status->failed) text += status->decision.reason == Reason::unsupported_mode || status->decision.reason == Reason::no_valid_modes ? L" · 目标暂不可用" : L" · 切换失败";
-    else if (status->snapshot.policy.availability != Availability::ready) text += L" · "+ReasonText(CheckTarget(status->snapshot.policy,60).reason);
+    else if (include_availability_reason && status->snapshot.policy.availability != Availability::ready)
+        text += L" · "+ReasonText(CheckTarget(status->snapshot.policy,60).reason);
     return text;
 }
 }
@@ -469,7 +470,9 @@ void App::Menu() {
     if (IsWindow(hwnd_) && !stopping_) { PostMessageW(hwnd_,WM_NULL,0,0); ShowConfirmation(); ArrangePopups(); }
 }
 TrayMenuState App::MenuState() const {
-    TrayMenuState state; state.summary = Summary(status_.get(),mode_,SettingsSaved());
+    // The menu appends its current availability reason. Tooltips and status
+    // popups keep the complete summary through the default argument.
+    TrayMenuState state; state.summary = Summary(status_.get(),mode_,SettingsSaved(),false);
     if (status_) state.input = status_->snapshot.policy;
     state.mode = mode_; state.busy = Busy(); state.usable = Usable(); state.targets = targets_;
     state.events_ready = events_ready_; state.startup = StartupRegistered(); return state;

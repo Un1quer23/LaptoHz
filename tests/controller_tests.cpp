@@ -16,6 +16,7 @@ struct Hardware {
     PowerSource source = PowerSource::ac;
     int hz = 60, applied = 0, attempts = 0, delay = 0;
     bool fail = false, drr = false;
+    Availability availability = Availability::ready;
     RecoveryState recovery = RecoveryState::not_needed;
     std::wstring route = L"inner|gpu-a|solo|fixed";
     std::vector<int> rates{60,240};
@@ -23,7 +24,8 @@ struct Hardware {
     DisplaySnapshot Inspect() {
         std::lock_guard lock(mutex);
         DisplaySnapshot value;
-        value.policy = {source,Availability::ready,Screen{route,hz,static_cast<double>(hz),rates,false,drr,capability}};
+        value.policy = {source,availability,Screen{route,hz,static_cast<double>(hz),rates,false,drr,capability}};
+        if (availability != Availability::ready) value.policy.screen.reset();
         value.device = L"test-inner"; value.monitor = L"test-monitor";
         return value;
     }
@@ -122,6 +124,31 @@ int main() {
         try {
             wait([&] { host = FindWindowW(kWindowClass,caption.c_str()); return host != nullptr; },"Controller host exists.");
             wait([&] { return hardware.Rate() == 240; },"Automatic startup applies the AC rule.");
+            const auto menu_text = [&](UINT command) {
+                wchar_t text[512]{};
+                if (const HMENU root = menu()) GetMenuStringW(root,command,text,512,MF_BYCOMMAND);
+                return std::wstring(text);
+            };
+            const int before_unavailable = hardware.Applications();
+            for (const auto availability : {Availability::absent,Availability::remote}) {
+                { std::lock_guard lock(hardware.mutex); hardware.availability = availability; }
+                PostMessageW(host,WM_DISPLAYCHANGE,0,0);
+                PostMessageW(host,WM_APP+1,0,NIN_SELECT);
+                const auto reason = ReasonText(availability == Availability::absent ? Reason::no_screen : Reason::remote_session);
+                wait([&] { return menu_text(kMenuSummary).find(reason) != std::wstring::npos; },"An unavailable display is explained in the real controller menu.");
+                const auto summary = menu_text(kMenuSummary);
+                check(summary.find(reason) == summary.rfind(reason),"The menu status shows the unavailable-display reason exactly once.");
+                check(summary.find(L"内屏暂不可用 · 外部供电 · 自动模式") == 0,"The unavailable-display status retains display, power and mode information.");
+                SendMessageW(host,WM_DISPLAYCHANGE,0,0); Sleep(150);
+                check(menu_text(kMenuSummary) == summary,"Refreshing an open menu does not duplicate its unavailable-display reason.");
+                MenuKey(host,VK_ESCAPE); wait([&] { return !menu(); },"The unavailable-display menu closes normally.");
+            }
+            { std::lock_guard lock(hardware.mutex); hardware.availability = Availability::ready; }
+            PostMessageW(host,WM_DISPLAYCHANGE,0,0);
+            PostMessageW(host,WM_APP+1,0,NIN_SELECT);
+            wait([&] { return menu_text(kMenuSummary) == L"240Hz · 外部供电 · 自动模式"; },"The old unavailable-display reason clears when the internal screen returns.");
+            check(hardware.Applications() == before_unavailable,"Reading unavailable and restored menu status does not submit a display change.");
+            MenuKey(host,VK_ESCAPE); wait([&] { return !menu(); },"The restored-display menu closes normally.");
             const int before_rejected = hardware.Applications();
             check(control(4) == ControlResult::manual_required,"A direct rate command is rejected in automatic mode.");
             SendMessageW(host,WM_COMMAND,kMenu60,0); Sleep(120);

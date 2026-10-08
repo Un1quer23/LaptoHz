@@ -1,5 +1,6 @@
 #include "tray_menu.hpp"
 #include "mode_hint.hpp"
+#include <commctrl.h>
 #include <algorithm>
 #include <memory>
 
@@ -20,6 +21,7 @@ bool ContainsMenu(HMENU root, HMENU candidate) {
 thread_local HWND input_owner = nullptr;
 thread_local HMENU input_menu = nullptr;
 thread_local TrayMenuRenderer* input_renderer = nullptr;
+constexpr UINT kPaintMenuArrows = WM_APP+51;
 LRESULT CALLBACK FilterMenuInput(int code, WPARAM wparam, LPARAM lparam) {
     if (code == MSGF_MENU && input_owner && lparam && FindTrayMenuWindow(input_owner,input_menu)) {
         const auto& message = *reinterpret_cast<const MSG*>(lparam);
@@ -193,6 +195,8 @@ std::optional<RECT> TrayMenuBounds(HWND owner, HMENU root) {
 TrayMenuRenderer::TrayMenuRenderer() = default;
 TrayMenuRenderer::~TrayMenuRenderer() {
     hint_.reset();
+    for (const HWND window : subclassed_windows_)
+        RemoveWindowSubclass(window,MenuWindowProc,reinterpret_cast<UINT_PTR>(this));
     if (input_hook_) {
         UnhookWindowsHookEx(input_hook_); input_owner = previous_owner_; input_menu = previous_menu_; input_renderer = previous_renderer_;
     }
@@ -273,7 +277,10 @@ void TrayMenuRenderer::RefreshAppearance(Appearance appearance) {
     StyleVisibleWindows(true);
 }
 void TrayMenuRenderer::RefreshVisibleWindows() { StyleVisibleWindows(false); }
-void TrayMenuRenderer::MenuSelection(HMENU menu, UINT command, UINT flags) { if (hint_) hint_->Selection(menu,command,flags); }
+void TrayMenuRenderer::MenuSelection(HMENU menu, UINT command, UINT flags) {
+    if (hint_) hint_->Selection(menu,command,flags);
+    QueueArrowPaint();
+}
 void TrayMenuRenderer::MenuInput(const MSG& message) { if (hint_) hint_->Input(message); }
 void TrayMenuRenderer::StyleVisibleWindows(bool repaint) {
     struct Paint { TrayMenuRenderer* renderer; bool repaint; std::vector<std::pair<HWND,HMENU>> visible; } paint{this,repaint,{}};
@@ -286,12 +293,61 @@ void TrayMenuRenderer::StyleVisibleWindows(bool repaint) {
             paint.visible.push_back(identity);
             if (paint.repaint || std::find(renderer.styled_windows_.begin(),renderer.styled_windows_.end(),identity) == renderer.styled_windows_.end()) {
                 ApplyWindowAppearance(window,renderer.appearance_);
+                if (SetWindowSubclass(window,MenuWindowProc,reinterpret_cast<UINT_PTR>(&renderer),reinterpret_cast<DWORD_PTR>(&renderer)) &&
+                    std::find(renderer.subclassed_windows_.begin(),renderer.subclassed_windows_.end(),window) == renderer.subclassed_windows_.end())
+                    renderer.subclassed_windows_.push_back(window);
                 RedrawWindow(window,nullptr,nullptr,RDW_INVALIDATE | RDW_UPDATENOW | RDW_FRAME);
             }
         }
         return TRUE;
     },reinterpret_cast<LPARAM>(&paint));
     styled_windows_ = std::move(paint.visible);
+}
+LRESULT CALLBACK TrayMenuRenderer::MenuWindowProc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR id, DWORD_PTR data) {
+    auto* renderer = reinterpret_cast<TrayMenuRenderer*>(data);
+    if (message == WM_NCDESTROY) {
+        RemoveWindowSubclass(window,MenuWindowProc,id);
+        return DefSubclassProc(window,message,wparam,lparam);
+    }
+    const LRESULT result = message == kPaintMenuArrows ? 0 : DefSubclassProc(window,message,wparam,lparam);
+    if (message == WM_PRINTCLIENT || (message == WM_PRINT && (lparam & PRF_CLIENT))) {
+        renderer->DrawSubmenuArrows(window,reinterpret_cast<HDC>(wparam));
+    } else if (message == WM_PAINT || message == kPaintMenuArrows) {
+        HDC dc = GetDC(window);
+        if (dc) { renderer->DrawSubmenuArrows(window,dc); ReleaseDC(window,dc); }
+    }
+    return result;
+}
+void TrayMenuRenderer::QueueArrowPaint() const {
+    for (const HWND window : subclassed_windows_)
+        if (IsWindowVisible(window)) PostMessageW(window,kPaintMenuArrows,0,0);
+}
+void TrayMenuRenderer::DrawSubmenuArrows(HWND window, HDC dc) const {
+    MENUBARINFO bar{}; bar.cbSize = sizeof(bar);
+    if (!dc || !GetMenuBarInfo(window,OBJID_CLIENT,0,&bar) || !ContainsMenu(menu_,bar.hMenu)) return;
+    const auto unit = [&](int value) { return MulDiv(value,dpi_,96); };
+    const int saved = SaveDC(dc);
+    for (int position = 0; position < GetMenuItemCount(bar.hMenu); ++position) {
+        if (!GetSubMenu(bar.hMenu,position)) continue;
+        RECT area{};
+        if (!GetMenuItemRect(owner_,bar.hMenu,position,&area)) continue;
+        MapWindowPoints(nullptr,window,reinterpret_cast<POINT*>(&area),2);
+        const UINT state = GetMenuState(bar.hMenu,position,MF_BYPOSITION);
+        const bool disabled = (state & (MF_GRAYED | MF_DISABLED)) != 0;
+        const bool selected = (state & MF_HILITE) && !disabled;
+        const COLORREF background = selected ? colors_.hover : colors_.background;
+        const COLORREF foreground = disabled ? colors_.disabled : selected ? colors_.hover_text : colors_.text;
+        // Native popup menus paint their own arrow after WM_DRAWITEM, using
+        // system menu colors. Replace that whole slot after native painting.
+        RECT slot = area; slot.left = std::max(slot.left,slot.right-unit(24));
+        HBRUSH brush = CreateSolidBrush(background); FillRect(dc,&slot,brush); DeleteObject(brush);
+        const int x = area.right-unit(12), center = (area.top+area.bottom)/2;
+        HPEN pen = CreatePen(PS_SOLID,std::max(1,unit(1)),foreground);
+        const auto previous = SelectObject(dc,pen);
+        MoveToEx(dc,x-unit(3),center-unit(4),nullptr); LineTo(dc,x+unit(1),center); LineTo(dc,x-unit(3),center+unit(4));
+        SelectObject(dc,previous); DeleteObject(pen);
+    }
+    RestoreDC(dc,saved);
 }
 bool TrayMenuRenderer::Measure(MEASUREITEMSTRUCT& item) const {
     const Row* row = Find(item.itemData);
@@ -328,12 +384,8 @@ bool TrayMenuRenderer::Draw(const DRAWITEMSTRUCT& item) const {
     SelectObject(item.hDC,font_); SetBkMode(item.hDC,TRANSPARENT); SetTextColor(item.hDC,text);
     RECT area = item.rcItem; area.left += unit(34); area.right -= unit(row->submenu ? 26 : 14);
     DrawTextW(item.hDC,label,-1,&area,DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS | DT_NOPREFIX);
-    if (row->submenu) {
-        const int x = item.rcItem.right-unit(12);
-        HPEN pen = CreatePen(PS_SOLID,std::max(1,unit(1)),text); const auto previous = SelectObject(item.hDC,pen);
-        MoveToEx(item.hDC,x-unit(3),center-unit(4),nullptr); LineTo(item.hDC,x+unit(1),center); LineTo(item.hDC,x-unit(3),center+unit(4));
-        SelectObject(item.hDC,previous); DeleteObject(pen);
-    }
-    RestoreDC(item.hDC,saved); return true;
+    RestoreDC(item.hDC,saved);
+    if (row->submenu) QueueArrowPaint();
+    return true;
 }
 }
