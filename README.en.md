@@ -4,7 +4,7 @@
 
 A laptop internal-display refresh rate utility with automatic switching based on power source, confirmation before switching, and manual rate selection.
 
-LaptoHz targets Windows 11 x64. The current version is **0.3.0-beta.5**. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. This is a general beta; tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). This version verifies recovery after a failed switch, distinguishing verified recovery, request failure, failed readback verification, cancellation, and environment changes. It also fixes duplicate status explanations and overlapping target-submenu arrows. It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, and current tray icons.
+LaptoHz targets Windows 11 x64. The current stable version is **0.3.0**. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. Tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). This version includes failed-switch recovery verification, fixes duplicate status explanations and overlapping target-submenu arrows, and displays complete error details while resizing popup windows and fonts when DPI changes. It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, and current tray icons.
 
 | Mode | Behavior |
 |---|---|
@@ -16,7 +16,7 @@ The default AC target is the **highest available rate**. On battery, the default
 
 ## Usage
 
-Download `LaptoHz-0.3.0-beta.5-win-x64.zip` from the [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.3.0-beta.5), extract it, and run `LaptoHz/LaptoHz.exe`. The release includes a `.sha256` checksum for the ZIP; `SHA256SUMS.txt` inside the package lists the SHA256 of each file.
+Download `LaptoHz-0.3.0-win-x64.zip` from the [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.3.0), extract it, and run `LaptoHz/LaptoHz.exe`. The release includes a `.sha256` checksum for the ZIP; `SHA256SUMS.txt` inside the package lists the SHA256 of each file.
 
 Put the EXE in a fixed directory and double-click it. Administrator privileges and an additional C++ runtime are not required. The first run enables startup at sign-in for the current user by default. The tray icon may be in the taskbar's hidden-icons area.
 
@@ -58,6 +58,8 @@ In Automatic mode, a rate selected through Windows Settings or another tool is k
 Confirmation mode establishes a power-source baseline at startup, when entering the mode, or when changing a target. Display notifications and wake under the same power source do not create a new suggestion. If the power source changes during sleep, the application asks after wake. It does not create a prompt when the recommended rate is already active. An existing suggestion is updated after another power-source or capability change; stale requests cannot execute.
 
 The confirmation window has no countdown and does not steal focus. It offers Switch to the suggested rate, Keep current, and ×. Keep current or × dismisses only that suggestion and keeps Confirmation mode active. Failures show a reason and allow a retry. The prompt is temporarily hidden during lock, display-off, and sleep. After success, a separate result notice appears. Its × button closes it manually; the lower-right countdown shows `9s → 8s → 7s → 6s → 5s → 4s → 3s → 2s → 1s`, and the notice closes after nine seconds.
+
+Notices and confirmation windows grow to fit wrapped text, including recovery results and observed frequencies. DPI changes resize the window, fonts, and buttons within the monitor work area while preserving focus, the confirmation request, and the original countdown.
 
 ## Support boundaries
 
@@ -126,7 +128,7 @@ LaptoHz uses C++20, CMake, and the Win32 API. In an MSVC environment, run `scrip
 
 The application icon combines a laptop, Hz lettering, and bidirectional switching arrows, with sizes from 16 to 256 pixels. Tray icons are drawn separately at 16–64 pixels to improve the visible area. Their light/dark strokes follow the taskbar theme, and the application loads sizes appropriate to taskbar DPI, updating them when the display or DPI changes. Regenerate them from the source image with `node scripts/create-icon.cjs`; see the [icon design and prompts](docs/icon-design.md).
 
-Default CTest coverage includes policy, confirmation, physical/virtual-mode filtering, backend recovery, settings, log paths, startup registration, popups, dynamic native menus, mode hints, the full controller, and read-only display validation. Recovery tests inject state reads, display calls, and waits into the actual backend, covering bounded readback, failure, cancellation, environment changes, fractional frequencies, and surrounding parameters that were not restored. Production uses the Windows interfaces. Menu tests cover real mouse hover and whole-menu repainting; hint tests cover delay, all three explanations, leaving/closing, keyboard input, focus, work-area bounds, and themes. Controller tests use isolated configuration and simulated hardware without changing the actual refresh rate or startup registration. Relevant tests skip when no internal display or interactive desktop is available. UI captures are stored in `build/portable-release/menu-captures`, `popup-captures`, `hint-captures`, and `controller-captures`.
+Default CTest coverage includes policy, confirmation, physical/virtual-mode filtering, backend recovery, settings, log paths, startup registration, popups, dynamic native menus, mode hints, the full controller, and read-only display validation. Recovery tests inject state reads, display calls, and waits into the actual backend, covering bounded readback, failure, cancellation, environment changes, fractional frequencies, and surrounding parameters that were not restored. Production uses the Windows interfaces. Popup tests use real backend error text and cover unsaved settings, simulated 96/120/144/168/192 DPI messages, work-area bounds, focus, confirmation requests, and the nine-second timer. Menu tests cover real mouse hover and whole-menu repainting; hint tests cover delay, all three explanations, leaving/closing, keyboard input, focus, work-area bounds, and themes. Controller tests use isolated configuration and simulated hardware without changing the actual refresh rate or startup registration. Relevant tests skip when no internal display or interactive desktop is available. UI captures are stored in `build/portable-release/menu-captures`, `popup-captures`, `hint-captures`, and `controller-captures`.
 
 ```powershell
 # Explicit hardware switching: test each valid rate, then restore the original actual rate
@@ -135,7 +137,7 @@ Default CTest coverage includes policy, confirmation, physical/virtual-mode filt
 .\build\portable-release\display_smoke_test.exe --switch
 ```
 
-`scripts/validate-runtime.ps1` checks startup toggling, launching through the shortcut, and idle overhead. It changes the startup preference and does not sign out or restart Windows. Actual power-source changes, sleep, sign-in, multiple displays, mixed DPI, HDR/games, and other laptops still require separate manual acceptance records.
+`scripts/validate-runtime.ps1` checks startup toggling, launching through the shortcut, and idle overhead. It changes the startup preference and does not sign out or restart Windows. The user reported that actual power-source changes, sleep/lock recovery, and sign-in startup passed on the tested laptop. Multiple displays, actual mixed-DPI use, HDR/games, and other laptops still require separate manual acceptance records.
 
 ## Implementation references
 

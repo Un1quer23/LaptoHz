@@ -32,6 +32,8 @@ private:
     void Paint();
     void DrawButton(const DRAWITEMSTRUCT& item);
     void Position(const std::wstring& device);
+    SIZE ContentSize(int width, int minimum_height, const RECT& work) const;
+    void ChangeDpi(UINT dpi, const RECT& suggested);
     void LayoutButtons();
     void Emit(PopupAction action);
     void Dismiss();
@@ -44,6 +46,8 @@ private:
     HFONT button_font_ = nullptr;
     std::uint64_t token_ = 0;
     std::wstring title_, body_;
+    UINT dpi_ = 96;
+    bool positioning_ = false;
     bool error_ = false;
     bool close_hovered_ = false, close_pressed_ = false;
     ULONGLONG deadline_ = 0;

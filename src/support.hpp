@@ -9,7 +9,7 @@ namespace rrs {
 inline constexpr wchar_t kAppName[] = L"LaptoHz";
 // Keep the host class stable so controls and the singleton work across the rename.
 inline constexpr wchar_t kWindowClass[] = L"RefreshRateSwitcher.Host.v1";
-inline constexpr wchar_t kVersion[] = L"0.3.0-beta.5";
+inline constexpr wchar_t kVersion[] = L"0.3.0";
 std::filesystem::path DataDirectory();
 std::filesystem::path ExecutablePath();
 std::wstring NativeError(LONG code);
