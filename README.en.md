@@ -2,9 +2,9 @@
 
 **Languages:** [简体中文](README.md) | English
 
-A laptop internal-display refresh rate utility with automatic switching based on power source, confirmation before switching, and manual rate selection.
+A Windows 11 x64 laptop internal-display refresh rate utility with automatic switching based on power source, confirmation before switching, and manual rate selection.
 
-LaptoHz targets Windows 11 x64. The current stable version is **0.4.0**, adding Chinese and English interfaces, Windows display-language detection, a saved language preference, and popup layouts that accommodate English text. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. Tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, failed-switch recovery verification, and dynamic DPI resizing.
+LaptoHz supports Simplified Chinese and English, following the Windows display language by default or a preference chosen in the tray menu. It detects available refresh rates from the internal display's physical capabilities reported by Windows, verifies switch results and recovery, and resizes popups when display scaling changes. Tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md).
 
 | Mode | Behavior |
 |---|---|
@@ -22,7 +22,7 @@ Put the EXE in a fixed directory and double-click it. Administrator privileges a
 
 **Simplified Chinese and English are supported.** By default it follows the Windows display language: Chinese Windows uses Simplified Chinese; other display languages use English. The tray menu's **Language / 语言** submenu offers **Follow Windows / 跟随系统**, **简体中文**, and **English**. Changes apply immediately and are remembered for the next launch. Existing confirmation suggestions stay open when changing language; the operating mode and refresh rate targets are preserved, and selecting a language does not submit a display change.
 
-**Left-click and right-click open the same tray menu.** Its header shows the current refresh rate, power source, and mode. When desktop and signal rates differ, both are shown, for example `30Hz (signal 60Hz)`. Use the arrow keys, Enter, and Esc to navigate; clicking outside closes the menu. Menus, confirmation windows, and result notices follow the Windows app light/dark theme and use system colors in high-contrast mode. Letter and number shortcuts have been removed.
+**Left-click and right-click open the same tray menu.** Its header shows the current refresh rate, power source, and mode. When desktop and signal rates differ, both are shown, for example `30Hz (signal 60Hz)`. Use the arrow keys, Enter, and Esc to navigate; clicking outside closes the menu. Menus, confirmation windows, and result notices follow the Windows app light/dark theme and use system colors in high-contrast mode.
 
 For a first run:
 
@@ -72,7 +72,7 @@ A switch changes only the refresh rate. Readback checks the resolution, color de
 
 An accepted recovery request and verified recovery are recorded separately. Notices, confirmation windows, and logs explain the final recovery result. Even verified recovery still means the target switch failed; the confirmation suggestion remains available for an explicit retry, and the application does not automatically switch back toward the failed target. When recovery cannot be verified, the last observed display state is recorded. Recovery and target driver return codes are stored separately.
 
-An external display in extended-desktop mode is allowed, with its parameters preserved. When only the external display is active, LaptoHz waits for the internal display to return. **Duplicate-display mode, multiple internal displays, remote/inactive sessions, and Windows Dynamic Refresh Rate (DRR) disable switching.** LaptoHz does not turn DRR off automatically; disable it in Windows Advanced display settings. If only one rate is available, the application explains this and avoids repeated switching. This release does not include ARM64, dedicated Windows 10 acceptance testing, external-display control, or vendor-specific interfaces.
+An external display in extended-desktop mode is allowed, with its parameters preserved. When only the external display is active, LaptoHz waits for the internal display to return. **Duplicate-display mode, multiple internal displays, remote/inactive sessions, and Windows Dynamic Refresh Rate (DRR) disable switching.** LaptoHz does not turn DRR off automatically; disable it in Windows Advanced display settings. If only one rate is available, the application explains this and avoids repeated switching. ARM64 builds, dedicated Windows 10 acceptance testing, external-display control, and vendor-specific interfaces are not provided.
 
 ## Configuration and logs
 
@@ -95,7 +95,7 @@ Battery=auto
 
 If saving fails, the current session uses the selected setting and shows “Settings not saved”, along with a failure notice. On restart, only successfully saved settings can be loaded. Manual mode does not reapply the last manually selected rate at startup.
 
-`switcher.log` records the launch source, mode/target changes, switch requests, target driver return codes, and separate recovery states and return codes. It rotates to `switcher.previous.log`, with each file about 256KiB. Before opening a log in Windows Notepad, the application resolves the actual path from a file handle, retaining the AppData path fix from 0.2.8. Logs stay on the local machine and are not automatically uploaded.
+`switcher.log` records the launch source, mode/target changes, switch requests, target driver return codes, and separate recovery states and return codes. It rotates to `switcher.previous.log`, with each file about 256KiB. Before opening a log in Windows Notepad, the application resolves the actual path from a file handle. Logs stay on the local machine and are not automatically uploaded.
 
 Startup uses `LaptoHz.lnk` in the current user's Startup folder, with the argument `--startup` and the EXE directory as its working directory. Enter `shell:startup` in File Explorer to inspect it. Migration from the old Run entry, Windows disabled-startup choices, and a user's choice to turn startup off are respected. Before moving or deleting the program, disable startup and exit. Testing a launch through the Startup-folder shortcut does not replace testing an actual sign-out/sign-in.
 
