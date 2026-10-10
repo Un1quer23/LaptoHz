@@ -1,7 +1,10 @@
 #include "app.hpp"
 #include "menu_probe.hpp"
 #include "render_probe.hpp"
+#include "mode_hint.hpp"
 #include <shellapi.h>
+#include <objidl.h>
+#include <gdiplus.h>
 #include <wtsapi32.h>
 #include <iostream>
 #include <stdexcept>
@@ -46,11 +49,11 @@ struct Hardware {
             std::lock_guard lock(mutex);
             if (fail || drr || route != before.policy.screen->route || rates != before.policy.screen->supported_hz ||
                 capability != before.policy.screen->capability_key || std::find(rates.begin(),rates.end(),target) == rates.end()) {
-                result.code = DISP_CHANGE_FAILED; result.detail = L"测试显示驱动拒绝本次切换";
+                result.code = DISP_CHANGE_FAILED; result.detail = LocalizedText{L"测试显示驱动拒绝本次切换",L"The test display driver rejected this change"};
                 if (recovery != RecoveryState::not_needed) {
                     result.code = DISP_CHANGE_SUCCESSFUL; result.recovery = recovery;
                     result.recovery_code = recovery == RecoveryState::request_failed ? DISP_CHANGE_FAILED : DISP_CHANGE_SUCCESSFUL;
-                    result.detail = RecoveryStateText(recovery)+L"\n目标刷新率未通过验证";
+                    result.detail = RecoveryMessage(recovery)+LocalizedText{L"\n目标刷新率未通过验证",L"\nThe target refresh rate did not pass verification"};
                 }
             } else { hz = target; ++applied; result.success = true; result.changed = true; }
         }
@@ -68,6 +71,23 @@ HWND ChildPopup(HWND owner, const wchar_t* caption) {
     },reinterpret_cast<LPARAM>(&search));
     return search.result;
 }
+bool CaptureWindow(HWND window, const std::filesystem::path& path) {
+    RECT rect{}; GetClientRect(window,&rect);
+    HDC dc = GetDC(window), buffer = CreateCompatibleDC(dc);
+    HBITMAP bitmap = CreateCompatibleBitmap(dc,rect.right,rect.bottom);
+    if (!buffer || !bitmap) { if (buffer) DeleteDC(buffer); if (bitmap) DeleteObject(bitmap); ReleaseDC(window,dc); return false; }
+    const auto previous = SelectObject(buffer,bitmap);
+    const bool painted = PrintWindow(window,buffer,PW_CLIENTONLY) != FALSE;
+    SelectObject(buffer,previous);
+    Gdiplus::GdiplusStartupInput input; ULONG_PTR token = 0; bool saved = false;
+    if (painted && Gdiplus::GdiplusStartup(&token,&input,nullptr) == Gdiplus::Ok) {
+        { Gdiplus::Bitmap image(bitmap,nullptr);
+          const CLSID png{0x557cf406,0x1a04,0x11d3,{0x9a,0x73,0x00,0x00,0xf8,0x1e,0xf3,0x2e}};
+          saved = image.Save(path.c_str(),&png,nullptr) == Gdiplus::Ok; }
+        Gdiplus::GdiplusShutdown(token);
+    }
+    DeleteObject(bitmap); DeleteDC(buffer); ReleaseDC(window,dc); return saved;
+}
 }
 int main() {
     USEROBJECTFLAGS flags{}; DWORD size = 0;
@@ -76,6 +96,7 @@ int main() {
     wchar_t temporary[MAX_PATH]{}; if (!GetTempPathW(MAX_PATH,temporary)) return 1;
     const auto directory = std::filesystem::path(temporary)/(L"rrs-controller-"+std::to_wstring(GetCurrentProcessId())+L"-"+std::to_wstring(GetTickCount64()));
     std::filesystem::create_directory(directory); MarkStartupInitialized(directory);
+    SaveLanguage(directory,Language::chinese);
     const auto captures = std::filesystem::current_path()/L"controller-captures";
     std::filesystem::create_directories(captures);
     Hardware hardware;
@@ -97,8 +118,8 @@ int main() {
             while (!condition() && GetTickCount64() < deadline) Sleep(20);
             check(condition(),message);
         };
-        const auto confirmation = [&] { return ChildPopup(host,L"刷新率切换确认"); };
-        const auto notification = [&] { return ChildPopup(host,L"刷新率切换提示"); };
+        const auto confirmation = [&] { return ChildPopup(host,Tr(Text::confirmation_caption).c_str()); };
+        const auto notification = [&] { return ChildPopup(host,Tr(Text::notification_caption).c_str()); };
         const auto menu = [&] { return ActiveMenu(host); };
         const auto control = [&](WPARAM value) { return static_cast<ControlResult>(SendMessageW(host,kControlMessage,value,0)); };
         const auto mode = [&](WPARAM value, Mode expected) {
@@ -120,6 +141,18 @@ int main() {
             check(SelectMenuItem(host,command,child),"Select the requested target from its frozen menu mapping.");
             wait([&] { return !menu(); },"Target selection closes the menu.");
             if (saved) wait([&] { const auto values = LoadRefreshTargets(directory); return (source == PowerSource::ac ? values.ac : values.battery) == hz; },"The selected target is persisted.");
+        };
+        const auto set_language = [&](Language language) {
+            PostMessageW(host,WM_APP+1,0,NIN_SELECT);
+            wait([&] { return menu() != nullptr; },"Open the unified menu for a language selection.");
+            const HMENU root = menu();
+            MENUITEMINFOW info{}; info.cbSize = sizeof(info); info.fMask = MIIM_SUBMENU;
+            check(GetMenuItemInfoW(root,kMenuLanguage,FALSE,&info) && info.hSubMenu,"The language submenu is present.");
+            check(SelectMenuItem(host,kMenuLanguage),"Keyboard navigation opens the language submenu.");
+            wait([&] { return FindTrayMenuWindow(host,info.hSubMenu) != nullptr; },"The language submenu is visible.");
+            const UINT command = language == Language::english ? kMenuLanguageEnglish : language == Language::chinese ? kMenuLanguageChinese : kMenuLanguageSystem;
+            check(SelectMenuItem(host,command,info.hSubMenu),"Choose the requested language with Enter.");
+            wait([&] { return !menu() && LoadLanguage(directory) == language; },"Language selection closes the menu and persists.");
         };
         try {
             wait([&] { host = FindWindowW(kWindowClass,caption.c_str()); return host != nullptr; },"Controller host exists.");
@@ -185,8 +218,33 @@ int main() {
             const int attempts = hardware.Attempts(); click(confirmation(),301);
             wait([&] { return hardware.Attempts() > attempts && confirmation() && IsWindowEnabled(GetDlgItem(confirmation(),301)); },"A failed confirmation stays available for retry.");
             check(hardware.Rate() == 240 && LoadMode(directory) == Mode::confirmation,"Failure preserves the mode and previous rate.");
+            const HWND language_confirmation = confirmation();
+            const int before_language = hardware.Attempts();
+            set_language(Language::english);
+            check(confirmation() == language_confirmation && hardware.Attempts() == before_language &&
+                LoadMode(directory) == Mode::confirmation && LoadRefreshTargets(directory) == RefreshTargets{},
+                "Changing language keeps the same failed confirmation, mode and targets without contacting the display driver.");
+            wchar_t english_button[64]{}; GetWindowTextW(GetDlgItem(confirmation(),301),english_button,64);
+            check(std::wstring(english_button) == L"Switch to 60Hz","The existing confirmation action immediately uses English.");
+            auto* translated_popup = reinterpret_cast<Popup*>(GetWindowLongPtrW(confirmation(),GWLP_USERDATA));
+            check(translated_popup && translated_popup->Capture(captures/L"english-existing-confirmation.png"),"Capture the existing failed confirmation after switching to English.");
+            PostMessageW(host,WM_APP+1,0,NIN_SELECT);
+            wait([&] { return menu() != nullptr; },"Open the English tray menu.");
+            check(menu_text(kMenuSummary).starts_with(L"240Hz · On battery · Confirmation mode") &&
+                menu_text(kMenuAuto) == L"Automatic mode","The controller's menu and summary use English.");
+            dark = false; SendMessageW(host,WM_THEMECHANGED,0,0);
+            check(CaptureWindow(FindTrayMenuWindow(host,menu()),captures/L"english-light-menu.png"),"Capture the light English menu.");
+            dark = true; SendMessageW(host,WM_THEMECHANGED,0,0);
+            check(CaptureWindow(FindTrayMenuWindow(host,menu()),captures/L"english-dark-menu.png"),"Capture the dark English menu.");
+            MenuKey(host,VK_HOME);
+            for (int step = 0; step < 3 && !(GetMenuState(menu(),kMenuAuto,MF_BYCOMMAND) & MF_HILITE); ++step) MenuKey(host,VK_DOWN);
+            check((GetMenuState(menu(),kMenuAuto,MF_BYCOMMAND) & MF_HILITE) != 0,"Arrow navigation highlights the English Automatic mode item.");
+            wait([&] { const HWND hint = FindModeHintWindow(host); return hint && IsWindowVisible(hint); },"English mode guidance appears on keyboard selection.");
+            check(CaptureWindow(FindModeHintWindow(host),captures/L"english-mode-hint.png"),"Capture English mode guidance.");
+            MenuKey(host,VK_ESCAPE); wait([&] { return !menu(); },"Escape closes the English menu.");
             { std::lock_guard lock(hardware.mutex); hardware.fail = false; }
             click(confirmation(),301); wait([&] { return hardware.Rate() == 60 && !confirmation(); },"Retry succeeds after the driver recovers.");
+            set_language(Language::chinese);
             hardware.Set(PowerSource::ac,60); power_event(); wait([&] { return confirmation() != nullptr; },"Pre-sleep prompt exists.");
             SendMessageW(host,WM_POWERBROADCAST,PBT_APMSUSPEND,0);
             check(!confirmation(),"Suspending temporarily hides the prompt.");
@@ -262,10 +320,14 @@ int main() {
             { std::lock_guard lock(hardware.mutex); hardware.delay = 350; }
             check(control(4) == ControlResult::accepted,"The next manual operation is accepted.");
             wait([&] { return hardware.Attempts() > before_manual; },"Manual operation starts.");
+            SendMessageW(host,WM_COMMAND,kMenuLanguageEnglish,0);
+            check(LoadLanguage(directory) == Language::english && LoadMode(directory) == Mode::manual,
+                "Language can be changed while a manual display operation is in flight.");
             check(control(5) == ControlResult::busy,"A duplicate submission is rejected while switching.");
             check(control(0) == ControlResult::accepted,"Selecting the existing manual mode is idempotent during switching.");
             hardware.Set(PowerSource::battery,240); power_event();
             wait([&] { return hardware.Rate() == 60; },"A power change during manual execution does not cancel the chosen target.");
+            SendMessageW(host,WM_COMMAND,kMenuLanguageChinese,0);
             { std::lock_guard lock(hardware.mutex); hardware.delay = 500; }
             hardware.Set(PowerSource::ac,60); const int before_auto = hardware.Attempts(); mode(1,Mode::automatic);
             wait([&] { return hardware.Attempts() > before_auto; },"Automatic operation starts.");

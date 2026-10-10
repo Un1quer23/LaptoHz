@@ -4,7 +4,7 @@
 
 笔记本内屏刷新率切换工具，支持按供电自动切换、切换前确认和手动选档。
 
-Windows 11 x64 内屏刷新率切换工具，当前正式版本 **0.3.0**。按 Windows 报告的内屏物理能力检测档位，可用于不同品牌笔记本；已实测机型和待验收范围见 [适配记录](docs/laptop-compatibility.md) 与 [验证记录](VALIDATION.md)。本版包含切换失败后的恢复结果校验、状态栏重复说明及目标子菜单箭头叠影修复，并让长错误说明完整显示、弹窗随动态缩放调整窗口与字体；沿用三个模式、确认流程、9 秒结果提示、物理档位筛选及当前托盘图标。
+Windows 11 x64 内屏刷新率切换工具，当前正式版本 **0.4.0**。本版新增中英文界面、跟随 Windows 显示语言、托盘语言选择与记忆，以及英文弹窗布局适配。按 Windows 报告的内屏物理能力检测档位，可用于不同品牌笔记本；已实测机型和待验收范围见 [适配记录](docs/laptop-compatibility.md) 与 [验证记录](VALIDATION.md)。继续提供三个模式、确认流程、9 秒结果提示、物理档位筛选、失败恢复校验与动态缩放。
 
 | 模式 | 行为 |
 |---|---|
@@ -16,11 +16,11 @@ Windows 11 x64 内屏刷新率切换工具，当前正式版本 **0.3.0**。按 
 
 ## 使用
 
-从 [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.3.0) 下载 `LaptoHz-0.3.0-win-x64.zip`，解压后运行 `LaptoHz/LaptoHz.exe`。同页提供 ZIP 的 `.sha256` 校验文件，包内 `SHA256SUMS.txt` 列出各文件的 SHA256。
+从 [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.4.0) 下载 `LaptoHz-0.4.0-win-x64.zip`，解压后运行 `LaptoHz/LaptoHz.exe`。同页提供 ZIP 的 `.sha256` 校验文件，包内 `SHA256SUMS.txt` 列出各文件的 SHA256。
 
 把 EXE 放在固定目录后双击运行，无需管理员权限或额外 C++ 运行库。首次运行默认开启当前用户登录自启。图标可能在任务栏隐藏图标区域。
 
-当前程序界面为简体中文；英文 README 中的菜单名称用于说明。
+**支持简体中文和 English。** 默认跟随 Windows 显示语言：中文系统使用简体中文，其他系统使用英文。托盘菜单的“语言 / Language”提供“跟随系统 / Follow Windows”“简体中文”“English”；选择后立即生效并记住，下次启动继续使用。已有确认建议在切换语言后保留，语言选择不会改变模式、刷新率目标或触发显示切换。
 
 **左右键打开同一个托盘菜单**，顶部显示当前刷新率、供电状态和模式。桌面刷新率与实际信号不同时分别显示，例如 `30Hz（信号 60Hz）`。方向键、Enter、Esc 可操作；点击外部关闭。菜单、确认窗和结果提示跟随 Windows 应用深浅色，高对比度使用系统配色。字母、数字快捷选择已移除。
 
@@ -47,6 +47,7 @@ Windows 11 x64 内屏刷新率切换工具，当前正式版本 **0.3.0**。按 
 | 手动刷新率 | 当前内屏支持且通过驱动校验的档位直接显示在主菜单中 |
 | 登录 Windows 时自动运行 | 开关当前用户登录自启 |
 | 查看诊断日志 | 用系统记事本打开本地运行和排障记录 |
+| 语言 | 跟随 Windows 显示语言，或固定使用简体中文／English |
 | 退出 | 保留当前刷新率，结束程序 |
 
 **先进入手动模式，再选择刷新率。** 进入手动模式保持当前显示状态、撤销旧电源任务和待确认建议，菜单在原位置继续显示。当前档位置灰并标“当前”；分数频率对应的等效档位也禁用，标“当前等效”。手动档位没有勾或单选圆点，模式组和两个目标子菜单各自使用单选圆点，自启使用勾。档位较多时由原生菜单滚动。
@@ -59,7 +60,7 @@ Windows 11 x64 内屏刷新率切换工具，当前正式版本 **0.3.0**。按 
 
 确认窗无倒计时，不抢焦点，提供“切换到某档位”“保持当前”和 ×。保持或 × 只放弃本次建议，保留确认模式。失败时显示原因并允许重试；锁屏、息屏和睡眠期间暂时隐藏。成功后显示独立的结果提示，× 可手动关闭，右下角每秒显示 `9s → 8s → 7s → 6s → 5s → 4s → 3s → 2s → 1s`，9 秒后关闭。
 
-通知和确认窗按正文换行高度自动增高，完整显示恢复结果和当前频率。缩放变化时调整外框、字体和按钮并约束在显示器工作区内，保留焦点、确认请求和原倒计时。
+通知和确认窗按正文换行高度自动增高，完整显示恢复结果和当前频率；根据标题和按钮文案调整宽度，英文使用 Segoe UI 字体。缩放变化时调整外框、字体和按钮并约束在显示器工作区内，保留焦点、确认请求和原倒计时。
 
 ## 支持边界
 
@@ -81,6 +82,7 @@ Windows 11 x64 内屏刷新率切换工具，当前正式版本 **0.3.0**。按 
 [App]
 StartupInitialized=1
 Mode=auto
+Language=system
 
 [RefreshRate]
 AC=auto
@@ -88,6 +90,8 @@ Battery=auto
 ```
 
 `Mode` 可为 `auto`、`confirm`、`manual`。`AC` 和 `Battery` 为 `auto` 或整数 Hz。旧配置缺少目标字段时采用动态默认值，保留模式和自启选择；目标格式错误时仅对应项回退默认并记录日志。不可用的合法整数目标保留，不偷偷替换。
+
+`Language` 可为 `system`（跟随 Windows）、`zh-CN`（简体中文）或 `en`（英文）。旧配置没有该项或格式无效时跟随系统；改语言保留其他配置。程序文案、错误说明和新写入的日志使用所选语言；Windows 缺少某条系统错误的对应翻译时，显示该语言的错误代码。已有历史日志保持原文。
 
 保存失败时，本次运行采用用户选择，状态标“设置未保存”，并提示失败；重启后只能读取实际保存成功的设置。手动模式不在启动时重应用上次档位。
 
@@ -112,6 +116,8 @@ Battery=auto
 
 `--switch <整数Hz>` 要求已经进入手动模式，且目标档位当前可用。当前档位只刷新状态，不重复应用或弹多余提示。`--pause` 进入手动，`--resume` 进入自动；`--status` 显示状态，`--exit` 退出，`--version` 输出版本。
 
+可用 `--diagnose --language en` 生成英文诊断说明，或用 `--preview-notification --language en --capture .\english-preview.png` 预览英文结果提示。`--language` 仅用于诊断和预览，接受 `system`、`zh-CN`、`en`，不改已保存的设置；常驻实例通过托盘菜单选择语言。诊断 JSON 的字段名、数值与档位逻辑保持，供电和错误等可读说明跟随语言。
+
 控制应答超时为三秒。返回码：0 已采用模式／接受切换请求；1 未运行、未响应或旧版本不支持；2 参数格式错误；3 诊断文件写入失败；4 非手动、忙碌、目标／会话不可用或控制被拒绝；5 模式已采用但保存失败。最终切换结果仍通过提示和日志反馈。
 
 适配报告保留旧字段，记录厂家、机型、显卡、逐档校验代码、配置目标及解析结果；`nominalHz` 是整数标称档位，`desktopHz` 是显示路径的桌面频率，`physicalHz` 是实际信号频率，三者分别记录。`physicalModesKnown`／`physicalModesError` 记录物理能力读取结果；`rateValidation[].origin` 区分 `physical`、`virtual`、`unverified`，`tested` 表示是否执行了 `CDS_TEST` 驱动预检查，被过滤档位会说明原因；实机切换结果另记验证记录。**不记录序列号，不自动上传**。在其他笔记本上先生成报告，再按 [适配记录](docs/laptop-compatibility.md) 的步骤人工验收。驱动校验成功不代表已完成该机型的实测。
@@ -126,8 +132,6 @@ Battery=auto
 .\dist\LaptoHz\LaptoHz.exe --version
 ```
 
-软件图标采用“笔记本 + Hz + 双向切换箭头”，包含 16–256 像素尺寸。托盘单独绘制 16–64 像素的笔记本和切换箭头，增大可见区域，并根据任务栏主题选择深浅线条、按任务栏 DPI 载入。使用 `node scripts/create-icon.cjs` 从源图重新生成，详见[图标设计与提示词](docs/icon-design.md)。
-
 默认 CTest 覆盖策略、确认、物理／虚拟档位筛选、显示后端恢复流程、配置、日志路径、自启、弹窗、动态原生菜单、模式操作提示、完整控制器和只读显示校验。恢复测试向实际后端注入状态读取、显示调用与等待函数，覆盖有限回读、失败、取消、环境变化、分数频率和周围参数未恢复；默认运行仍使用 Windows 接口。弹窗回归使用实际后端产生的长错误文本，覆盖设置未保存、96／120／144／168／192 DPI 消息、工作区边界、焦点、确认请求和 9 秒计时。菜单测试包含真实鼠标悬停与整框重绘检查；模式提示测试覆盖显示延迟、三种说明、移开／关闭、键盘、焦点、工作区与主题。控制器使用隔离配置和模拟硬件，不改真实刷新率或自启。无内屏／非交互桌面相应测试跳过；界面截图在 `build/portable-release/menu-captures`、`popup-captures`、`hint-captures` 和 `controller-captures`。
 
 ```powershell
@@ -139,6 +143,8 @@ Battery=auto
 
 `scripts/validate-runtime.ps1` 检查自启开关、快捷方式启动与空闲开销，会改变自启选择，不注销或重启 Windows。本机真实插拔电源、睡眠／锁屏恢复和重登自启已由用户反馈通过；多屏、真实混合 DPI、HDR／游戏及其他笔记本仍须分别记录人工验收。
 
+另有文案完整性、语言回退、配置迁移与保存失败的回归；英文原生弹窗覆盖长恢复错误、三种主题及 100%／150%／200% DPI 消息。控制器验证实际菜单选语言、已有失败确认的即时翻译，以及切换语言不会取消正在进行的手动操作。
+
 ## 实现依据
 
 - [兼容显示模式枚举](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsexw)
@@ -149,6 +155,7 @@ Battery=auto
 - [原生菜单选中通知](https://learn.microsoft.com/en-us/windows/win32/menurc/wm-menuselect)、[Windows 跟踪提示](https://learn.microsoft.com/en-us/windows/win32/controls/implement-tracking-tooltips)
 - [Windows 主题](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-windows-themes)、[菜单自绘](https://learn.microsoft.com/en-us/windows/win32/menurc/using-menus#creating-owner-drawn-menu-items)
 - [文件实际路径查询](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew)、[Shell 快捷方式](https://learn.microsoft.com/en-us/windows/win32/shell/links)
+- [Windows 显示语言](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getuserdefaultuilanguage)、[系统错误文案](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessagew)
 - [LLVM-MinGW](https://github.com/mstorsjo/llvm-mingw)、[CMake](https://cmake.org/)、[Ninja](https://ninja-build.org/)
 
 ## 许可证

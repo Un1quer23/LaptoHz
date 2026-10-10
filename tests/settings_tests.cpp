@@ -12,6 +12,7 @@ int main() {
     int result = 0;
     try {
         check(LoadMode(directory) == Mode::automatic,"Missing settings default to automatic.");
+        check(LoadLanguage(directory) == Language::system,"Missing language follows Windows.");
         check(MarkStartupInitialized(directory),"Create legacy startup marker.");
         check(LoadMode(directory) == Mode::automatic,"Legacy startup-only configuration upgrades to automatic.");
         for (const auto mode : {Mode::confirmation,Mode::manual,Mode::automatic}) {
@@ -23,11 +24,21 @@ int main() {
         check(LoadMode(directory) == Mode::automatic,"Invalid mode falls back to automatic.");
         check(!SaveMode(directory/L"missing-parent"/L"missing-child",Mode::manual),"A write failure is reported.");
         check(ParseMode(L"confirm") == Mode::confirmation && !ParseMode(L"240"),"CLI mode validation.");
+        for (const auto language : {Language::english,Language::chinese,Language::system}) {
+            check(SaveLanguage(directory,language) && LoadLanguage(directory) == language,"Language preference survives a reload.");
+            check(StartupInitialized(directory) && LoadMode(directory) == Mode::automatic,"Language choices preserve existing startup and mode fields.");
+        }
+        check(WritePrivateProfileStringW(L"App",L"Language",L"invalid",(directory/L"settings.ini").c_str()) != FALSE,"Write malformed language.");
+        check(LoadLanguage(directory) == Language::system,"Invalid language safely follows Windows.");
+        check(!SaveLanguage(directory/L"missing-parent",Language::english),"Language save failures are reported.");
         check(LoadRefreshTargets(directory) == RefreshTargets{},"Legacy settings use dynamic defaults.");
         check(SaveMode(directory,Mode::confirmation),"Save a mode before adding rate settings.");
         check(SaveRefreshTarget(directory,PowerSource::ac,165) && SaveRefreshTarget(directory,PowerSource::battery,48),"Persist arbitrary validated target choices.");
         check(LoadRefreshTargets(directory) == RefreshTargets{165,48},"Both targets survive a reload.");
         check(StartupInitialized(directory) && LoadMode(directory) == Mode::confirmation,"Rate choices preserve existing startup and mode fields.");
+        check(SaveLanguage(directory,Language::english) && LoadRefreshTargets(directory) == RefreshTargets{165,48},"Language choices preserve both rate targets.");
+        check(SaveMode(directory,Mode::confirmation) && SaveRefreshTarget(directory,PowerSource::ac,165) &&
+            LoadLanguage(directory) == Language::english,"Other preferences preserve the saved language.");
         check(SaveRefreshTarget(directory,PowerSource::ac,0) && LoadRefreshTargets(directory) == RefreshTargets{0,48},"Dynamic defaults are stored as auto, not the current maximum.");
         check(!SaveRefreshTarget(directory,PowerSource::unknown,60) && !SaveRefreshTarget(directory,PowerSource::ac,1),"Invalid power sources and driver-default frequencies are rejected.");
         for (const auto value : {L"",L"invalid",L"-60",L"60.0",L"60x",L"1",L"2147483648",L"99999999999999999999999999999999999999999999999999999999999999999999"}) {

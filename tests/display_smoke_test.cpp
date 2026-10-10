@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     for (const int hz : original.policy.screen->supported_hz) {
         const auto result = backend.Apply(backend.Inspect(), hz, [] { return false; });
         std::cout << "Requested " << hz << "Hz; success=" << result.success << "; changed=" << result.changed
-                  << "; detail=" << Utf8(result.detail) << '\n';
+                  << "; detail=" << Utf8(result.detail.Get()) << '\n';
         if (!result.success) { code = 1; break; }
         std::cout << DiagnosticJson(result.after, backend);
     }

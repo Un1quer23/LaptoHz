@@ -37,7 +37,7 @@ LRESULT CALLBACK FilterMenuInput(int code, WPARAM wparam, LPARAM lparam) {
     }
     return CallNextHookEx(nullptr,code,wparam,lparam);
 }
-void Text(HMENU menu, UINT id, const std::wstring& text) {
+void SetText(HMENU menu, UINT id, const std::wstring& text) {
     MENUITEMINFOW item{}; item.cbSize = sizeof(item); item.fMask = MIIM_STRING;
     item.dwTypeData = const_cast<wchar_t*>(text.c_str()); SetMenuItemInfoW(menu,id,FALSE,&item);
 }
@@ -51,11 +51,10 @@ std::wstring TargetLabel(const TrayMenuState& state, PowerSource power) {
     const int configured = power == PowerSource::ac ? state.targets.ac : state.targets.battery;
     const auto rates = state.input && state.input->screen ? state.input->screen->supported_hz : std::vector<int>{};
     const int resolved = TargetRate(power,rates,state.targets);
-    std::wstring label = power == PowerSource::ac ? L"插电目标：" : L"电池目标：";
-    if (!configured) label += power == PowerSource::ac ? L"最高可用" : L"优先 60Hz";
-    else label += std::to_wstring(configured)+L"Hz";
-    if (!configured) label += resolved ? L"（"+std::to_wstring(resolved)+L"Hz）" : L"（暂无档位）";
-    else if (!state.input || !Allowed(CheckTarget(*state.input,configured))) label += L"（暂不可用）";
+    const auto value = configured ? std::to_wstring(configured)+L"Hz" : Tr(power == PowerSource::ac ? Text::highest_rate : Text::prefer_60);
+    std::wstring label = Tr(Text::target_label,{Tr(power == PowerSource::ac ? Text::ac_target : Text::battery_target),value});
+    if (!configured) label += resolved ? Tr(Text::resolved_rate,{std::to_wstring(resolved)}) : Tr(Text::no_rate_suffix);
+    else if (!state.input || !Allowed(CheckTarget(*state.input,configured))) label += Tr(Text::unavailable_suffix);
     return label;
 }
 void RadioItem(HMENU menu, UINT command) {
@@ -72,9 +71,9 @@ HMENU CreateTrayMenu(const TrayMenuState& state) {
     const auto rates = state.input && state.input->screen ? state.input->screen->supported_hz : std::vector<int>{};
     UINT next = 1000;
     AppendMenuW(menu,MF_STRING | MF_GRAYED,kMenuSummary,L""); AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
-    AppendMenuW(menu,MF_STRING,kMenuAuto,L"自动模式");
-    AppendMenuW(menu,MF_STRING,kMenuConfirm,L"确认模式");
-    AppendMenuW(menu,MF_STRING,kMenuManual,L"手动模式");
+    AppendMenuW(menu,MF_STRING,kMenuAuto,Tr(Text::mode_auto).c_str());
+    AppendMenuW(menu,MF_STRING,kMenuConfirm,Tr(Text::mode_confirm).c_str());
+    AppendMenuW(menu,MF_STRING,kMenuManual,Tr(Text::mode_manual).c_str());
     AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
     for (const auto source : {PowerSource::ac,PowerSource::battery}) {
         HMENU child = CreatePopupMenu();
@@ -85,7 +84,7 @@ HMENU CreateTrayMenu(const TrayMenuState& state) {
         SetMenuItemInfoW(menu,GetMenuItemCount(menu)-1,TRUE,&info);
         const auto kind = source == PowerSource::ac ? TrayActionKind::ac_target : TrayActionKind::battery_target;
         const UINT automatic = source == PowerSource::ac ? kMenuAcAuto : kMenuBatteryAuto;
-        AppendMenuW(child,MF_STRING,automatic,source == PowerSource::ac ? L"默认：最高可用" : L"默认：优先 60Hz");
+        AppendMenuW(child,MF_STRING,automatic,Tr(source == PowerSource::ac ? Text::default_highest : Text::default_60).c_str());
         RadioItem(child,automatic); layout->entries.push_back({automatic,{kind,0,capability,version}});
         AppendMenuW(child,MF_SEPARATOR,0,nullptr);
         auto choices = rates;
@@ -100,15 +99,24 @@ HMENU CreateTrayMenu(const TrayMenuState& state) {
     }
     AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
     AppendMenuW(menu,MF_STRING | MF_GRAYED,kMenuRates,L"");
-    if (rates.empty()) AppendMenuW(menu,MF_STRING | MF_GRAYED,kMenuNoRates,L"没有可用档位");
+    if (rates.empty()) AppendMenuW(menu,MF_STRING | MF_GRAYED,kMenuNoRates,Tr(Text::no_rates).c_str());
     for (const int hz : rates) {
         const UINT id = hz == 60 ? kMenu60 : hz == 240 ? kMenu240 : next++;
         AppendMenuW(menu,MF_STRING,id,L""); layout->entries.push_back({id,{TrayActionKind::manual,hz,capability,version}});
     }
     AppendMenuW(menu,MF_SEPARATOR,0,nullptr);
-    AppendMenuW(menu,MF_STRING,kMenuStartup,L"登录 Windows 时自动运行");
-    AppendMenuW(menu,MF_STRING,kMenuLogs,L"查看诊断日志");
-    AppendMenuW(menu,MF_SEPARATOR,0,nullptr); AppendMenuW(menu,MF_STRING,kMenuExit,L"退出");
+    AppendMenuW(menu,MF_STRING,kMenuStartup,Tr(Text::startup_menu).c_str());
+    AppendMenuW(menu,MF_STRING,kMenuLogs,Tr(Text::logs_menu).c_str());
+    HMENU languages = CreatePopupMenu();
+    if (!languages) { DestroyMenu(menu); return nullptr; }
+    AppendMenuW(languages,MF_STRING,kMenuLanguageSystem,Tr(Text::language_system).c_str());
+    // Native language names remain discoverable whichever language is active.
+    AppendMenuW(languages,MF_STRING,kMenuLanguageChinese,L"简体中文");
+    AppendMenuW(languages,MF_STRING,kMenuLanguageEnglish,L"English");
+    AppendMenuW(menu,MF_POPUP,reinterpret_cast<UINT_PTR>(languages),Tr(Text::language_menu).c_str());
+    MENUITEMINFOW language_info{}; language_info.cbSize = sizeof(language_info); language_info.fMask = MIIM_ID; language_info.wID = kMenuLanguage;
+    SetMenuItemInfoW(menu,GetMenuItemCount(menu)-1,TRUE,&language_info);
+    AppendMenuW(menu,MF_SEPARATOR,0,nullptr); AppendMenuW(menu,MF_STRING,kMenuExit,Tr(Text::exit_menu).c_str());
     MENUINFO info{}; info.cbSize = sizeof(info); info.fMask = MIM_MENUDATA; info.dwMenuData = reinterpret_cast<ULONG_PTR>(layout.get());
     if (!SetMenuInfo(menu,&info)) { DestroyMenu(menu); return nullptr; }
     layout.release(); UpdateTrayMenu(menu,state); return menu;
@@ -122,18 +130,18 @@ std::optional<TrayAction> ResolveTrayAction(HMENU menu, UINT command) {
 void UpdateTrayMenu(HMENU menu, const TrayMenuState& state) {
     std::wstring summary = state.summary;
     const Reason reason = ScreenReason(state);
-    if (state.busy) summary += L" · 正在切换…";
-    else if (!state.usable) summary += L" · 当前会话或屏幕不可用";
+    if (state.busy) summary += L" · "+Tr(Text::switching);
+    else if (!state.usable) summary += L" · "+Tr(Text::session_screen_unavailable);
     else if (reason != Reason::none) summary += L" · "+ReasonText(reason);
-    Text(menu,kMenuSummary,summary);
-    std::wstring rates = L"手动刷新率";
-    if (state.mode != Mode::manual) rates += L" · 请先选择手动模式";
-    else if (state.busy) rates += L" · 正在切换…";
-    else if (!state.usable) rates += L" · 当前会话不可用";
+    SetText(menu,kMenuSummary,summary);
+    std::wstring rates = Tr(Text::manual_rates);
+    if (state.mode != Mode::manual) rates += L" · "+Tr(Text::select_manual);
+    else if (state.busy) rates += L" · "+Tr(Text::switching);
+    else if (!state.usable) rates += L" · "+Tr(Text::session_unavailable);
     else if (reason != Reason::none) rates += L" · "+ReasonText(reason);
     if (state.input && state.input->screen && state.input->screen->supported_hz.size() == 1)
-        rates += L" · 当前仅支持 "+std::to_wstring(state.input->screen->supported_hz.front())+L"Hz";
-    Text(menu,kMenuRates,rates);
+        rates += L" · "+Tr(Text::only_rate,{std::to_wstring(state.input->screen->supported_hz.front())});
+    SetText(menu,kMenuRates,rates);
     const auto capability = state.input ? CapabilityKey(*state.input) : L"";
     const auto version = state.input && state.input->screen ? state.input->screen->capability_version : 0;
     if (const auto* layout = MenuLayout(menu)) for (const auto& entry : layout->entries) {
@@ -142,13 +150,13 @@ void UpdateTrayMenu(HMENU menu, const TrayMenuState& state) {
         if (action.kind == TrayActionKind::manual) {
             const bool current = state.input && state.input->screen && RateMatches(*state.input->screen,action.hz);
             const bool exact = current && state.input->screen->nominal_hz == action.hz;
-            Text(menu,entry.id,std::to_wstring(action.hz)+L"Hz"+(current ? exact ? L"（当前）" : L"（当前等效）" : L""));
+            SetText(menu,entry.id,std::to_wstring(action.hz)+L"Hz"+(current ? Tr(exact ? Text::current_suffix : Text::equivalent_suffix) : L""));
             EnableMenuItem(menu,entry.id,MF_BYCOMMAND | (state.mode == Mode::manual && state.input &&
                 decision.action == Action::apply && state.usable && !state.busy && capability == action.capability_key && version == action.capability_version ? MF_ENABLED : MF_GRAYED));
             CheckMenuItem(menu,entry.id,MF_BYCOMMAND | MF_UNCHECKED);
         } else {
             const int configured = action.kind == TrayActionKind::ac_target ? state.targets.ac : state.targets.battery;
-            if (action.hz) Text(menu,entry.id,std::to_wstring(action.hz)+L"Hz"+(!Allowed(decision) ? L"（暂不可用）" : L""));
+            if (action.hz) SetText(menu,entry.id,std::to_wstring(action.hz)+L"Hz"+(!Allowed(decision) ? Tr(Text::unavailable_suffix) : L""));
             const bool available = !action.hz || (Allowed(decision) && capability == action.capability_key && version == action.capability_version);
             EnableMenuItem(menu,entry.id,MF_BYCOMMAND | (state.usable && !state.busy && available ? MF_ENABLED : MF_GRAYED));
             CheckMenuItem(menu,entry.id,MF_BYCOMMAND | (configured == action.hz ? MF_CHECKED : MF_UNCHECKED));
@@ -156,13 +164,15 @@ void UpdateTrayMenu(HMENU menu, const TrayMenuState& state) {
     }
     for (const auto power : {PowerSource::ac,PowerSource::battery}) {
         const UINT id = power == PowerSource::ac ? kMenuAcTarget : kMenuBatteryTarget;
-        Text(menu,id,TargetLabel(state,power));
+        SetText(menu,id,TargetLabel(state,power));
         EnableMenuItem(menu,id,MF_BYCOMMAND | (state.usable && !state.busy ? MF_ENABLED : MF_GRAYED));
     }
     CheckMenuRadioItem(menu,kMenuAuto,kMenuManual,state.mode == Mode::automatic ? kMenuAuto :
         state.mode == Mode::confirmation ? kMenuConfirm : kMenuManual,MF_BYCOMMAND);
     for (const UINT id : {kMenuAuto,kMenuConfirm}) EnableMenuItem(menu,id,MF_BYCOMMAND | (state.events_ready ? MF_ENABLED : MF_GRAYED));
     CheckMenuItem(menu,kMenuStartup,MF_BYCOMMAND | (state.startup ? MF_CHECKED : MF_UNCHECKED));
+    CheckMenuRadioItem(menu,kMenuLanguageSystem,kMenuLanguageEnglish,
+        state.language == Language::chinese ? kMenuLanguageChinese : state.language == Language::english ? kMenuLanguageEnglish : kMenuLanguageSystem,MF_BYCOMMAND);
 }
 HWND FindTrayMenuWindow(HWND owner, HMENU expected) {
     struct Search { HMENU expected; HWND result = nullptr; } search{expected};

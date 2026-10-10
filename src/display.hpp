@@ -17,7 +17,8 @@ struct PathState {
 };
 struct DisplaySnapshot {
     PolicyInput policy;
-    std::wstring device, monitor, detail;
+    std::wstring device, monitor;
+    LocalizedText detail;
     DEVMODEW current{};
     LONG error = 0;
     std::vector<PathState> paths;
@@ -28,12 +29,13 @@ struct DisplaySnapshot {
 };
 enum class RecoveryState { not_needed, verified, request_failed, verification_failed, cancelled, environment_changed };
 std::wstring RecoveryStateText(RecoveryState state);
+LocalizedText RecoveryMessage(RecoveryState state);
 struct ApplyResult {
     bool success = false, changed = false, retryable = false;
     LONG code = 0;
     RecoveryState recovery = RecoveryState::not_needed;
     std::optional<LONG> recovery_code;
-    std::wstring detail;
+    LocalizedText detail;
     DisplaySnapshot after;
 };
 // Empty callbacks use Windows. Injected callbacks exercise the same apply and

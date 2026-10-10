@@ -37,7 +37,7 @@ std::wstring RecoveryDetail(RecoveryState state) {
         },[](DWORD) {}});
     const auto result = backend.Apply(saved,60,[] { return false; });
     if (result.success || result.recovery != state) throw std::runtime_error("The real backend must produce the expected recovery failure.");
-    return result.detail;
+    return result.detail.Get();
 }
 bool BodyFits(Popup& popup,const std::wstring& body,PopupKind kind,UINT dpi) {
     RECT client{}; GetClientRect(popup.Window(),&client);
@@ -47,11 +47,30 @@ bool BodyFits(Popup& popup,const std::wstring& body,PopupKind kind,UINT dpi) {
     const int available = area.bottom-area.top;
     HDC dc = GetDC(popup.Window());
     HFONT font = CreateFontW(-unit(13),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Microsoft YaHei UI");
+        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,
+        CurrentLanguage() == Language::english ? L"Segoe UI" : L"Microsoft YaHei UI");
     const auto previous = SelectObject(dc,font);
     const int required = DrawTextW(dc,body.c_str(),-1,&area,DT_WORDBREAK | DT_NOPREFIX | DT_CALCRECT);
     SelectObject(dc,previous); DeleteObject(font); ReleaseDC(popup.Window(),dc);
     return required <= available;
+}
+bool TitleFits(Popup& popup,const std::wstring& title,UINT dpi) {
+    RECT client{}; GetClientRect(popup.Window(),&client);
+    HDC dc = GetDC(popup.Window());
+    HFONT font = CreateFontW(-MulDiv(18,dpi,96),0,0,0,FW_SEMIBOLD,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Segoe UI");
+    const auto previous = SelectObject(dc,font); SIZE size{};
+    GetTextExtentPoint32W(dc,title.c_str(),static_cast<int>(title.size()),&size);
+    SelectObject(dc,previous); DeleteObject(font); ReleaseDC(popup.Window(),dc);
+    return size.cx <= client.right-MulDiv(70,dpi,96);
+}
+bool ButtonFits(HWND control) {
+    RECT client{}; GetClientRect(control,&client); wchar_t text[256]{}; GetWindowTextW(control,text,256);
+    HDC dc = GetDC(control);
+    const auto previous = SelectObject(dc,reinterpret_cast<HFONT>(SendMessageW(control,WM_GETFONT,0,0)));
+    SIZE size{}; GetTextExtentPoint32W(dc,text,lstrlenW(text),&size);
+    SelectObject(dc,previous); ReleaseDC(control,dc);
+    return size.cx <= client.right && size.cy <= client.bottom;
 }
 RECT ChangeDpi(Popup& popup,UINT previous_dpi,UINT next_dpi) {
     const RECT original = popup.Bounds();
@@ -233,6 +252,36 @@ int main() {
         const RECT hidden_dpi = ChangeDpi(notice,GetDpiForWindow(notice.Window()),144);
         const RECT hidden_bounds = notice.Bounds();
         check(EqualRect(&hidden_dpi,&hidden_bounds) && !notice.Visible(),"A DPI message does not show a hidden notification.");
+        SetUiLanguage(Language::english); confirmation.RefreshLanguage(); notice.RefreshLanguage();
+        const std::array<PopupButton,2> english_buttons{{{Tr(Text::switch_to_button,{L"60"}),true,true},{Tr(Text::keep_current),true,false}}};
+        for (const auto recovery : {RecoveryState::request_failed,RecoveryState::verification_failed}) {
+            const auto detail = RecoveryDetail(recovery);
+            const auto body = Tr(Text::settings_warning,{detail});
+            const auto title = Tr(Text::switch_incomplete);
+            for (const auto appearance : {Appearance{false,false},Appearance{true,false},Appearance{false,true}}) {
+                confirmation.RefreshAppearance(appearance); notice.RefreshAppearance(appearance);
+                notice.Show(title,body,true);
+                confirmation.ShowActions(title,Tr(Text::power_disconnected)+L"\n"+body,english_buttons,50,L"",true);
+                UINT previous_dpi = GetDpiForWindow(confirmation.Window());
+                for (const UINT dpi : {previous_dpi,96u,144u,192u}) {
+                    ChangeDpi(notice,previous_dpi,dpi); ChangeDpi(confirmation,previous_dpi,dpi);
+                    check(BodyFits(notice,body,PopupKind::notification,dpi) &&
+                        BodyFits(confirmation,Tr(Text::power_disconnected)+L"\n"+body,PopupKind::confirmation,dpi),
+                        "Complete English recovery errors fit at 100%, 150% and 200% DPI.");
+                    check(TitleFits(confirmation,title,dpi) && ButtonFits(GetDlgItem(confirmation.Window(),301)) &&
+                        ButtonFits(GetDlgItem(confirmation.Window(),302)),"English titles and action labels fit at each DPI.");
+                    previous_dpi = dpi;
+                }
+                const std::wstring name = appearance.high_contrast ? L"contrast" : appearance.dark ? L"dark" : L"light";
+                check(confirmation.Capture(captures/(L"english-recovery-"+name+L".png")),"Capture English recovery details in every theme.");
+            }
+        }
+        const auto wide_title = Tr(Text::target_set,{Tr(Text::ac_target),Tr(Text::highest_rate)});
+        notice.RefreshAppearance({false,false}); notice.Show(wide_title,Tr(Text::check_power_rules));
+        check(TitleFits(notice,wide_title,GetDpiForWindow(notice.Window())),"A long English target title expands without truncation.");
+        check(notice.Capture(captures/L"english-target.png"),"Capture the complete English target title.");
+        click(confirmation,302);
+        check(last.action == PopupAction::second && last.token == 50,"English actions preserve their request token.");
         std::cout << "PASS: " << assertions << " native popup assertions; DPI " << GetDpiForWindow(confirmation.Window()) << ".\n";
     } catch (const std::exception& error) { std::cerr << "FAIL: " << error.what() << '\n'; result = 1; }
     confirmation.Hide(); notice.Hide(); pump(30); DestroyWindow(owner);

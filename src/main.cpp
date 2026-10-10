@@ -16,7 +16,7 @@ void Output(const std::string& text) {
     }
 }
 void StartupFailure(const std::wstring& text) noexcept {
-    try { rrs::Logger(rrs::DataDirectory()).Write(L"启动失败 · " + text); } catch (...) {}
+    try { rrs::Logger(rrs::DataDirectory()).Write(rrs::Tr(rrs::Text::log_startup_failure)+L" · " + text); } catch (...) {}
     OutputDebugStringW(text.c_str());
 }
 }
@@ -40,6 +40,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             else if (arg == L"--no-startup") options.skip_startup_initialization = true;
             else if (arg == L"--diagnose") diagnose = true;
             else if (arg == L"--preview-notification") options.preview = true;
+            else if (arg == L"--language") {
+                if (options.language || i+1 >= args.size()) return 2;
+                options.language = ParseLanguage(args[++i]);
+                if (!options.language) return 2;
+            }
             else if ((arg == L"--output" || arg == L"--capture") && i + 1 < args.size()) {
                 if (arg == L"--output") options.report = args[++i]; else options.capture = args[++i];
             } else if (arg == L"--mode" || arg == L"--switch") {
@@ -63,6 +68,9 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             else { Output("Invalid argument. See README.md.\n"); return 2; }
         }
         if ((diagnose && options.preview) || (!control.empty() && (diagnose || options.preview))) return 2;
+        // Language overrides only affect read-only diagnostics and UI previews.
+        // The running application's persistent preference is chosen in its menu.
+        if (options.language && !diagnose && !options.preview) return 2;
         if (!control.empty()) {
             HWND host = RunningHost();
             if (!host) return 1;
@@ -84,6 +92,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             Output("Restart the tool to load the current version before sending commands.\n"); return 1;
         }
         if (diagnose) {
+            SetUiLanguage(options.language.value_or(LoadLanguage(DataDirectory())));
             DisplayBackend backend;
             const auto snapshot = backend.Inspect();
             const auto json = DiagnosticJson(snapshot,backend,LoadRefreshTargets(DataDirectory()));
@@ -92,20 +101,21 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
             return snapshot.policy.availability == Availability::error ? 1 : 0;
         }
         if (!options.preview) {
+            SetUiLanguage(LoadLanguage(DataDirectory()));
             // Share the existing singleton with releases using the old product name.
             singleton = CreateMutexW(nullptr, FALSE, L"Local\\RefreshRateSwitcher.Instance.v1");
-            if (!singleton) { StartupFailure(L"无法创建单实例标记 · " + NativeError(GetLastError())); return 2; }
+            if (!singleton) { StartupFailure(Tr(Text::log_singleton_failed)+L" · " + NativeError(GetLastError())); return 2; }
             if (GetLastError() == ERROR_ALREADY_EXISTS) {
                 HWND host = RunningHost();
                 if (host) PostMessageW(host, WM_APP + 10, 2, 0);
-                else StartupFailure(L"已有单实例标记，但主窗口尚未就绪");
+                else StartupFailure(Tr(Text::log_host_not_ready));
                 CloseHandle(singleton); return host ? 0 : 1;
             }
         }
         App app;
         const int result = app.Run(instance, options);
         if (singleton) CloseHandle(singleton);
-        if (result && !options.preview) StartupFailure(L"运行初始化或消息循环返回 " + std::to_wstring(result));
+        if (result && !options.preview) StartupFailure(Tr(Text::log_run_result,{std::to_wstring(result)}));
         return result;
     } catch (const std::exception& error) {
         if (singleton) CloseHandle(singleton);

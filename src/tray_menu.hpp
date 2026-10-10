@@ -10,6 +10,7 @@ inline constexpr UINT kMenuSummary = 100, kMenuStartup = 102, kMenuLogs = 103, k
 inline constexpr UINT kMenuRates = 106;
 inline constexpr UINT kMenuNoRates = 107, kMenuAcTarget = 130, kMenuBatteryTarget = 131;
 inline constexpr UINT kMenuAcAuto = 200, kMenuBatteryAuto = 201;
+inline constexpr UINT kMenuLanguage = 140, kMenuLanguageSystem = 210, kMenuLanguageChinese = 211, kMenuLanguageEnglish = 212;
 inline constexpr UINT kMenuAuto = 110, kMenuConfirm = 111, kMenuManual = 112;
 inline constexpr UINT kMenu60 = 120, kMenu240 = 121;
 struct TrayMenuState {
@@ -18,6 +19,7 @@ struct TrayMenuState {
     Mode mode = Mode::automatic;
     bool busy = false, usable = true, events_ready = true, startup = false;
     RefreshTargets targets;
+    Language language = Language::system;
 };
 enum class TrayActionKind { manual, ac_target, battery_target };
 struct TrayAction { TrayActionKind kind; int hz; std::wstring capability_key; std::uint64_t capability_version = 0; };

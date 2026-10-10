@@ -16,6 +16,7 @@ enum class WorkKind { reconcile, manual, confirm, dismiss };
 struct AppOptions {
     bool startup = false, skip_startup_initialization = false, preview = false;
     std::filesystem::path report, capture;
+    std::optional<Language> language;
 };
 // Defaults use the real Windows backend. Tests can exercise the same message loop
 // with isolated settings and deterministic hardware snapshots.
@@ -45,7 +46,7 @@ struct Update {
     Decision decision;
     std::optional<Confirmation> confirmation;
     bool changed = false, failed = false, cancelled = false, completed_confirmation = false;
-    std::wstring detail;
+    LocalizedText detail;
 };
 class App {
 public:
@@ -66,6 +67,8 @@ private:
     void StopWorker();
     void Accept(std::unique_ptr<Update> update);
     bool SetMode(Mode mode, bool announce = true);
+    void SetLanguage(Language language);
+    void RefreshLanguage();
     ControlResult ManualSwitch(int target_hz, const std::wstring& capability = L"", std::uint64_t version = 0);
     ControlResult SetTarget(PowerSource source, int hz, const std::wstring& capability = L"", std::uint64_t version = 0);
     void OnPopup(const PopupEvent& event);
@@ -116,11 +119,14 @@ private:
     std::atomic<std::uint64_t> applying_epoch_{~std::uint64_t{0}};
     RefreshTargets targets_;
     bool ac_saved_ = true, battery_saved_ = true;
+    Language language_ = Language::system;
+    bool language_saved_ = true;
     std::uint64_t next_request_ = 0, active_action_ = 0;
     bool reconcile_after_unlock_ = false, tray_installed_ = false, events_ready_ = false, mode_saved_ = true;
     std::unique_ptr<Update> status_;
     std::optional<Confirmation> pending_confirmation_;
-    std::wstring last_failure_, confirmation_error_;
+    std::wstring last_failure_;
+    LocalizedText confirmation_error_;
     ULONGLONG preview_start_ = 0;
     HWND previous_foreground_ = nullptr;
     bool preview_focus_preserved_ = false, preview_capture_saved_ = false;

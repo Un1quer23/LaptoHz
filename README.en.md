@@ -4,7 +4,7 @@
 
 A laptop internal-display refresh rate utility with automatic switching based on power source, confirmation before switching, and manual rate selection.
 
-LaptoHz targets Windows 11 x64. The current stable version is **0.3.0**. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. Tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). This version includes failed-switch recovery verification, fixes duplicate status explanations and overlapping target-submenu arrows, and displays complete error details while resizing popup windows and fonts when DPI changes. It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, and current tray icons.
+LaptoHz targets Windows 11 x64. The current stable version is **0.4.0**, adding Chinese and English interfaces, Windows display-language detection, a saved language preference, and popup layouts that accommodate English text. It detects rates from the internal display's physical capabilities reported by Windows and can be used with different laptop brands. Tested devices and outstanding checks are listed in the [compatibility notes](docs/laptop-compatibility.md) and [validation record](VALIDATION.md). It retains the three operating modes, confirmation flow, nine-second result notices, physical-mode filtering, failed-switch recovery verification, and dynamic DPI resizing.
 
 | Mode | Behavior |
 |---|---|
@@ -16,20 +16,20 @@ The default AC target is the **highest available rate**. On battery, the default
 
 ## Usage
 
-Download `LaptoHz-0.3.0-win-x64.zip` from the [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.3.0), extract it, and run `LaptoHz/LaptoHz.exe`. The release includes a `.sha256` checksum for the ZIP; `SHA256SUMS.txt` inside the package lists the SHA256 of each file.
+Download `LaptoHz-0.4.0-win-x64.zip` from the [GitHub Release](https://github.com/Un1quer23/LaptoHz/releases/tag/v0.4.0), extract it, and run `LaptoHz/LaptoHz.exe`. The release includes a `.sha256` checksum for the ZIP; `SHA256SUMS.txt` inside the package lists the SHA256 of each file.
 
 Put the EXE in a fixed directory and double-click it. Administrator privileges and an additional C++ runtime are not required. The first run enables startup at sign-in for the current user by default. The tray icon may be in the taskbar's hidden-icons area.
 
-The current application UI is in Simplified Chinese. English menu names in this README are explanatory translations.
+**Simplified Chinese and English are supported.** By default it follows the Windows display language: Chinese Windows uses Simplified Chinese; other display languages use English. The tray menu's **Language / 语言** submenu offers **Follow Windows / 跟随系统**, **简体中文**, and **English**. Changes apply immediately and are remembered for the next launch. Existing confirmation suggestions stay open when changing language; the operating mode and refresh rate targets are preserved, and selecting a language does not submit a display change.
 
-**Left-click and right-click open the same tray menu.** Its header shows the current refresh rate, power source, and mode. When desktop and signal rates differ, both are shown, for example `30Hz（信号 60Hz）` (30Hz desktop, 60Hz signal). Use the arrow keys, Enter, and Esc to navigate; clicking outside closes the menu. Menus, confirmation windows, and result notices follow the Windows app light/dark theme and use system colors in high-contrast mode. Letter and number shortcuts have been removed.
+**Left-click and right-click open the same tray menu.** Its header shows the current refresh rate, power source, and mode. When desktop and signal rates differ, both are shown, for example `30Hz (signal 60Hz)`. Use the arrow keys, Enter, and Esc to navigate; clicking outside closes the menu. Menus, confirmation windows, and result notices follow the Windows app light/dark theme and use system colors in high-contrast mode. Letter and number shortcuts have been removed.
 
 For a first run:
 
 1. Left-click or right-click the tray icon and check the refresh rate, power source, and mode in the header.
 2. Hover over Automatic, Confirmation, or Manual mode for about **0.5 seconds** to show an explanation beside the menu. Highlighting a mode with the arrow keys also shows the explanation. Moving to another item, leaving the menu, or closing it hides the hint.
 3. Choose Automatic mode to switch according to the power source, or Confirmation mode to decide after each power-source change. Both use the AC and battery targets configured in the menu.
-4. To switch manually, first select Manual mode, then choose an available rate below it. A disabled rate marked “当前” (Current) is already active.
+4. To switch manually, first select Manual mode, then choose an available rate below it. A disabled rate marked “current” is already active.
 
 | Mode hint | Explanation |
 |---|---|
@@ -42,14 +42,15 @@ Hovering or highlighting with the arrow keys only shows an explanation. Clicking
 | Menu item | Behavior |
 |---|---|
 | Automatic / Confirmation / Manual | Mutually exclusive modes, saved across application restarts |
-| AC target | Submenu offering Default: highest available or a currently valid rate |
+| Plugged-in target | Submenu offering Default: highest available or a currently valid rate |
 | Battery target | Submenu offering Default: prefer 60Hz or a currently valid rate |
 | Manual refresh rates | Rates supported by the current internal display and validated by the driver, shown directly in the main menu |
 | Run automatically at Windows sign-in | Toggles startup for the current user |
 | View diagnostic log | Opens local runtime and troubleshooting records in Windows Notepad |
+| Language | Follows the Windows display language, or uses Simplified Chinese or English |
 | Exit | Exits while keeping the current refresh rate |
 
-**Enter Manual mode before selecting a rate.** Entering it keeps the current display state, cancels earlier power-source tasks and pending suggestions, and leaves the menu open at the same position. The current rate is disabled and marked “当前” (Current); an equivalent rate label for a fractional frequency is also disabled and marked “当前等效” (Current equivalent). Manual rates have no checkmark or radio indicator. The mode group and each target submenu use radio indicators; startup uses a checkmark. The native menu scrolls when many rates are available.
+**Enter Manual mode before selecting a rate.** Entering it keeps the current display state, cancels earlier power-source tasks and pending suggestions, and leaves the menu open at the same position. The current rate is disabled and marked “current”; an equivalent rate label for a fractional frequency is also disabled and marked “equivalent to current”. Manual rates have no checkmark or radio indicator. The mode group and each target submenu use radio indicators; startup uses a checkmark. The native menu scrolls when many rates are available.
 
 Changing a target does not change the mode. Automatic mode checks it immediately. Confirmation mode cancels the old suggestion and establishes a new power-source baseline, then waits for the next actual power-source change. Manual mode keeps the actual refresh rate. Target editing and repeated rate changes are disabled while a switch is in progress. A selected custom target that becomes unavailable is retained with an explanation; its power-source rule is paused while the other rule can still work. Default targets are resolved again when capabilities change, rather than saving a fixed rate from the current machine.
 
@@ -59,7 +60,7 @@ Confirmation mode establishes a power-source baseline at startup, when entering 
 
 The confirmation window has no countdown and does not steal focus. It offers Switch to the suggested rate, Keep current, and ×. Keep current or × dismisses only that suggestion and keeps Confirmation mode active. Failures show a reason and allow a retry. The prompt is temporarily hidden during lock, display-off, and sleep. After success, a separate result notice appears. Its × button closes it manually; the lower-right countdown shows `9s → 8s → 7s → 6s → 5s → 4s → 3s → 2s → 1s`, and the notice closes after nine seconds.
 
-Notices and confirmation windows grow to fit wrapped text, including recovery results and observed frequencies. DPI changes resize the window, fonts, and buttons within the monitor work area while preserving focus, the confirmation request, and the original countdown.
+Notices and confirmation windows grow to fit wrapped text, including recovery results and observed frequencies. Widths also accommodate titles and action labels, and English popups use Segoe UI. DPI changes resize the window, fonts, and buttons within the monitor work area while preserving focus, the confirmation request, and the original countdown.
 
 ## Support boundaries
 
@@ -81,6 +82,7 @@ Files normally live in `%LOCALAPPDATA%\RefreshRateSwitcher`. LaptoHz retains thi
 [App]
 StartupInitialized=1
 Mode=auto
+Language=system
 
 [RefreshRate]
 AC=auto
@@ -89,7 +91,9 @@ Battery=auto
 
 `Mode` accepts `auto`, `confirm`, or `manual`. `AC` and `Battery` accept `auto` or an integer Hz value. Older configurations without target fields use dynamic defaults while preserving mode and startup preferences. An invalid target falls back to the default for that power source only and is logged. A valid integer target that is unavailable is retained rather than silently replaced.
 
-If saving fails, the current session uses the selected setting and shows “设置未保存” (Settings not saved), along with a failure notice. On restart, only successfully saved settings can be loaded. Manual mode does not reapply the last manually selected rate at startup.
+`Language` accepts `system` (follow Windows), `zh-CN` (Simplified Chinese), or `en` (English). Missing or invalid values follow Windows. Language changes preserve other settings. Application messages, error details, and new log entries use the selected language. If Windows lacks a requested system-error translation, the app shows the error code in that language. Existing log entries keep their original text.
+
+If saving fails, the current session uses the selected setting and shows “Settings not saved”, along with a failure notice. On restart, only successfully saved settings can be loaded. Manual mode does not reapply the last manually selected rate at startup.
 
 `switcher.log` records the launch source, mode/target changes, switch requests, target driver return codes, and separate recovery states and return codes. It rotates to `switcher.previous.log`, with each file about 256KiB. Before opening a log in Windows Notepad, the application resolves the actual path from a file handle, retaining the AppData path fix from 0.2.8. Logs stay on the local machine and are not automatically uploaded.
 
@@ -112,6 +116,8 @@ To upgrade from a version named Refresh Rate Switcher, first disable startup in 
 
 `--switch <integer Hz>` requires Manual mode and a currently available target. Selecting the current rate refreshes the status without applying it again or creating an unnecessary notice. `--pause` selects Manual mode, `--resume` selects Automatic mode, `--status` shows the status, `--exit` exits, and `--version` prints the version.
 
+Use `--diagnose --language en` for English diagnostic descriptions, or `--preview-notification --language en --capture .\english-preview.png` to preview an English result notice. `--language` is accepted only with diagnostics or previews and takes `system`, `zh-CN`, or `en`. It does not change saved settings; choose a resident instance's language through its tray menu. Diagnostic JSON field names, numeric values, and rate logic remain unchanged; readable power and error descriptions follow the language preference.
+
 Control replies have a three-second timeout. Exit codes are: 0 for an adopted mode or accepted switch request; 1 for no running instance, no response, or an unsupported older version; 2 for invalid arguments; 3 for a diagnostic-file write failure; 4 for a non-manual, busy, unavailable, or rejected operation; and 5 for an adopted mode whose setting could not be saved. The final switch result is reported through notices and logs.
 
 Compatibility reports retain existing fields and record the manufacturer, model, graphics adapters, per-rate validation codes, configured targets, and resolved targets. `nominalHz` is the integer rate label, `desktopHz` is the display path's desktop rate, and `physicalHz` is the signal rate. `physicalModesKnown` and `physicalModesError` report physical-capability query status. `rateValidation[].origin` distinguishes `physical`, `virtual`, and `unverified`; `tested` indicates whether the `CDS_TEST` driver pre-check was performed. Filtered rates include a reason. Actual hardware switching results are recorded separately. **Serial numbers are not collected, and reports are not automatically uploaded.** On another laptop, generate a report first and perform the checks in the [compatibility notes](docs/laptop-compatibility.md). Successful driver validation alone does not mean that the laptop has completed hardware acceptance testing.
@@ -126,8 +132,6 @@ LaptoHz uses C++20, CMake, and the Win32 API. In an MSVC environment, run `scrip
 .\dist\LaptoHz\LaptoHz.exe --version
 ```
 
-The application icon combines a laptop, Hz lettering, and bidirectional switching arrows, with sizes from 16 to 256 pixels. Tray icons are drawn separately at 16–64 pixels to improve the visible area. Their light/dark strokes follow the taskbar theme, and the application loads sizes appropriate to taskbar DPI, updating them when the display or DPI changes. Regenerate them from the source image with `node scripts/create-icon.cjs`; see the [icon design and prompts](docs/icon-design.md).
-
 Default CTest coverage includes policy, confirmation, physical/virtual-mode filtering, backend recovery, settings, log paths, startup registration, popups, dynamic native menus, mode hints, the full controller, and read-only display validation. Recovery tests inject state reads, display calls, and waits into the actual backend, covering bounded readback, failure, cancellation, environment changes, fractional frequencies, and surrounding parameters that were not restored. Production uses the Windows interfaces. Popup tests use real backend error text and cover unsaved settings, simulated 96/120/144/168/192 DPI messages, work-area bounds, focus, confirmation requests, and the nine-second timer. Menu tests cover real mouse hover and whole-menu repainting; hint tests cover delay, all three explanations, leaving/closing, keyboard input, focus, work-area bounds, and themes. Controller tests use isolated configuration and simulated hardware without changing the actual refresh rate or startup registration. Relevant tests skip when no internal display or interactive desktop is available. UI captures are stored in `build/portable-release/menu-captures`, `popup-captures`, `hint-captures`, and `controller-captures`.
 
 ```powershell
@@ -139,6 +143,8 @@ Default CTest coverage includes policy, confirmation, physical/virtual-mode filt
 
 `scripts/validate-runtime.ps1` checks startup toggling, launching through the shortcut, and idle overhead. It changes the startup preference and does not sign out or restart Windows. The user reported that actual power-source changes, sleep/lock recovery, and sign-in startup passed on the tested laptop. Multiple displays, actual mixed-DPI use, HDR/games, and other laptops still require separate manual acceptance records.
 
+Tests also cover translation completeness, language fallback, settings migration, and save failures. English native popups cover long recovery errors, all three themes, and simulated 100%/150%/200% DPI messages. Controller tests exercise language selection through the actual menu, immediate translation of an existing failed confirmation, and language changes during a manual display operation.
+
 ## Implementation references
 
 - [Compatible display-mode enumeration](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsexw)
@@ -149,6 +155,7 @@ Default CTest coverage includes policy, confirmation, physical/virtual-mode filt
 - [Native-menu selection notifications](https://learn.microsoft.com/en-us/windows/win32/menurc/wm-menuselect) and [Windows tracking tooltips](https://learn.microsoft.com/en-us/windows/win32/controls/implement-tracking-tooltips)
 - [Windows themes](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-windows-themes) and [owner-drawn menus](https://learn.microsoft.com/en-us/windows/win32/menurc/using-menus#creating-owner-drawn-menu-items)
 - [Actual file-path resolution](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlew) and [Shell shortcuts](https://learn.microsoft.com/en-us/windows/win32/shell/links)
+- [Windows display language](https://learn.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-getuserdefaultuilanguage) and [system-error messages](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessagew)
 - [LLVM-MinGW](https://github.com/mstorsjo/llvm-mingw), [CMake](https://cmake.org/), and [Ninja](https://ninja-build.org/)
 
 ## License

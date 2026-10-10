@@ -7,11 +7,11 @@ namespace rrs {
 namespace {
 constexpr wchar_t kContext[] = L"RefreshRateSwitcher.ModeHint.Context";
 constexpr UINT_PTR kDelayTimer = 0x52525348;
-struct Help { UINT command; const wchar_t* title; const wchar_t* text; };
+struct Help { UINT command; Text title; Text text; };
 constexpr Help kHelp[] = {
-    {kMenuAuto,L"自动模式",L"按插电／电池目标自动切换。\n进入此模式，以及启动、唤醒时会核对刷新率。"},
-    {kMenuConfirm,L"确认模式",L"插拔电源后先询问，确认才切换。\n弹窗会保持显示；选择“保持当前”或 × 可放弃本次切换。"},
-    {kMenuManual,L"手动模式",L"先选此模式，再点击下方的刷新率。\n插拔电源和唤醒不会覆盖手动选择。"}
+    {kMenuAuto,Text::mode_auto,Text::hint_auto},
+    {kMenuConfirm,Text::mode_confirm,Text::hint_confirm},
+    {kMenuManual,Text::mode_manual,Text::hint_manual}
 };
 const Help* HelpFor(UINT command) {
     for (const auto& help : kHelp) if (help.command == command) return &help;
@@ -99,9 +99,9 @@ void ModeHint::Show() {
     POINT point{}; GetCursorPos(&point);
     if (!keyboard_ && !PtInRect(&row,point)) { Hide(); return; }
     const auto* help = HelpFor(command_);
-    tool_.lpszText = const_cast<wchar_t*>(help->text);
+    tool_.lpszText = const_cast<wchar_t*>(TextFor(help->text,CurrentLanguage()));
     SendMessageW(window_,TTM_UPDATETIPTEXTW,0,reinterpret_cast<LPARAM>(&tool_));
-    SendMessageW(window_,TTM_SETTITLEW,TTI_NONE,reinterpret_cast<LPARAM>(help->title));
+    SendMessageW(window_,TTM_SETTITLEW,TTI_NONE,reinterpret_cast<LPARAM>(TextFor(help->title,CurrentLanguage())));
     MONITORINFO monitor{}; monitor.cbSize = sizeof(monitor);
     if (!GetMonitorInfoW(MonitorFromRect(&row,MONITOR_DEFAULTTONEAREST),&monitor)) { Hide(); return; }
     const int gap = MulDiv(8,dpi_,96);

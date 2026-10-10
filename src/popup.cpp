@@ -1,4 +1,5 @@
 #include "popup.hpp"
+#include "localization.hpp"
 #include <dwmapi.h>
 #include <gdiplus.h>
 #include <windowsx.h>
@@ -11,7 +12,8 @@ constexpr wchar_t kPopupClass[] = L"RefreshRateSwitcher.Notification.v1";
 constexpr int kFirstButton = 301, kSecondButton = 302, kCloseButton = 303;
 HFONT PopupFont(UINT dpi, int size, int weight = FW_NORMAL) {
     return CreateFontW(-MulDiv(size,dpi,96),0,0,0,weight,FALSE,FALSE,FALSE,DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,L"Microsoft YaHei UI");
+        OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,CLEARTYPE_QUALITY,DEFAULT_PITCH,
+        CurrentLanguage() == Language::english ? L"Segoe UI" : L"Microsoft YaHei UI");
 }
 RECT BodyRect(const RECT& client, PopupKind kind, UINT dpi) {
     const auto unit = [dpi](int value) { return MulDiv(value,dpi,96); };
@@ -41,21 +43,26 @@ bool Popup::Initialize(HINSTANCE instance, HWND owner, PopupKind kind) {
     cls.cbSize = sizeof(cls); cls.hInstance = instance; cls.lpfnWndProc = Procedure;
     cls.hCursor = LoadCursorW(nullptr, IDC_ARROW); cls.lpszClassName = kPopupClass;
     if (!RegisterClassExW(&cls) && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return false;
-    const wchar_t* caption = kind == PopupKind::notification ? L"刷新率切换提示" : L"刷新率切换确认";
+    const auto caption = Tr(kind == PopupKind::notification ? Text::notification_caption : Text::confirmation_caption);
     const DWORD ex_style = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | (kind == PopupKind::notification ? WS_EX_NOACTIVATE : 0);
-    hwnd_ = CreateWindowExW(ex_style, kPopupClass, caption,
+    hwnd_ = CreateWindowExW(ex_style, kPopupClass, caption.c_str(),
         WS_POPUP | WS_CLIPCHILDREN, 0, 0, 360, 112, owner_, nullptr, instance, this);
     if (hwnd_) dpi_ = GetDpiForWindow(hwnd_);
     if (hwnd_) { const DWORD preference = 2; DwmSetWindowAttribute(hwnd_, static_cast<DWMWINDOWATTRIBUTE>(33), &preference, sizeof(preference)); }
     if (hwnd_ && kind_ != PopupKind::notification) {
         for (size_t i = 0; i < controls_.size(); ++i) {
-            controls_[i] = CreateWindowExW(0, L"BUTTON", i == 2 ? L"关闭" : L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+            controls_[i] = CreateWindowExW(0, L"BUTTON", i == 2 ? Tr(Text::close).c_str() : L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                 0, 0, 0, 0, hwnd_, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kFirstButton + i)), instance, nullptr);
             if (!controls_[i]) return false;
         }
     }
     RefreshAppearance(ReadAppearance());
     return hwnd_ != nullptr;
+}
+void Popup::RefreshLanguage() {
+    if (!hwnd_) return;
+    SetWindowTextW(hwnd_,Tr(kind_ == PopupKind::notification ? Text::notification_caption : Text::confirmation_caption).c_str());
+    if (controls_[2]) SetWindowTextW(controls_[2],Tr(Text::close).c_str());
 }
 void Popup::RefreshAppearance(Appearance appearance) {
     colors_ = ColorsFor(appearance); ApplyWindowAppearance(hwnd_,appearance);
@@ -96,8 +103,21 @@ SIZE Popup::ContentSize(int width, int minimum_height, const RECT& work) const {
     const int maximum_height = std::max(1,static_cast<int>(work.bottom-work.top)-2*margin);
     width = std::clamp(width,1,maximum_width);
     HDC dc = GetDC(hwnd_);
+    HFONT title_font = PopupFont(dpi_,18,FW_SEMIBOLD);
+    const auto original = SelectObject(dc,title_font);
+    SIZE title_size{}; GetTextExtentPoint32W(dc,title_.c_str(),static_cast<int>(title_.size()),&title_size);
+    // Translated titles and actions can be wider than their Chinese equivalents.
+    width = std::min(maximum_width,std::max(width,static_cast<int>(title_size.cx)+MulDiv(70,dpi_,96)));
     HFONT font = PopupFont(dpi_,13);
-    const auto previous = SelectObject(dc,font);
+    SelectObject(dc,font);
+    if (kind_ == PopupKind::confirmation) {
+        int longest = 0;
+        for (const auto& button : buttons_) {
+            SIZE size{}; GetTextExtentPoint32W(dc,button.text.c_str(),static_cast<int>(button.text.size()),&size);
+            longest = std::max(longest,static_cast<int>(size.cx));
+        }
+        width = std::min(maximum_width,std::max(width,2*longest+MulDiv(88,dpi_,96)));
+    }
     const auto measure = [&] {
         const RECT client{0,0,width,0};
         RECT body = BodyRect(client,kind_,dpi_);
@@ -108,7 +128,7 @@ SIZE Popup::ContentSize(int width, int minimum_height, const RECT& work) const {
     };
     int height = measure();
     if (height > maximum_height && width < maximum_width) { width = maximum_width; height = measure(); }
-    SelectObject(dc,previous); DeleteObject(font); ReleaseDC(hwnd_,dc);
+    SelectObject(dc,original); DeleteObject(font); DeleteObject(title_font); ReleaseDC(hwnd_,dc);
     return SIZE{width,std::min(maximum_height,std::max(minimum_height,height))};
 }
 void Popup::ChangeDpi(UINT dpi, const RECT& suggested) {

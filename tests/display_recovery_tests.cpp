@@ -70,11 +70,11 @@ int main() {
     const auto check = [&](bool condition, const char* message) { ++assertions; if (!condition) throw std::runtime_error(message); };
     const auto failed_target = [&](const ApplyResult& result, RecoveryState expected) {
         const auto state_message = "Expected recovery state "+std::to_string(static_cast<int>(expected))+", observed "+
-            std::to_string(static_cast<int>(result.recovery))+" after "+std::to_string(assertions)+" assertions: "+Utf8(result.detail);
+            std::to_string(static_cast<int>(result.recovery))+" after "+std::to_string(assertions)+" assertions: "+Utf8(result.detail.Get());
         check(result.recovery == expected,state_message.c_str());
         check(!result.success && !result.changed && !result.retryable,"Recovery never converts a failed target into success or an automatic retry.");
         check(result.code == DISP_CHANGE_SUCCESSFUL,"The original target interface code is preserved independently.");
-        check(result.detail.find(RecoveryStateText(expected)) != std::wstring::npos,"The result detail includes the recovery outcome.");
+        check(result.detail.Get().find(RecoveryStateText(expected)) != std::wstring::npos,"The result detail includes the recovery outcome.");
     };
     const auto mismatch = [&](DisplaySnapshot observed) {
         Fixture test; test.recovery_reads = {std::move(observed)};
@@ -104,7 +104,12 @@ int main() {
             Fixture test; test.recovery_code = DISP_CHANGE_FAILED;
             auto result = test.Run(); failed_target(result,RecoveryState::request_failed);
             check(result.recovery_code == DISP_CHANGE_FAILED && test.recovery_read_count == 1,"A rejected recovery preserves its code and observes the final state once.");
-            check(result.detail.find(L"返回码 -1") != std::wstring::npos,"The request failure detail includes its independent interface code.");
+            check(result.detail.Get().find(L"返回码 -1") != std::wstring::npos,"The request failure detail includes its independent interface code.");
+            SetUiLanguage(Language::english);
+            check(result.detail.Get().find(L"return code -1") != std::wstring::npos &&
+                result.detail.Get().find(L"Could not request the original display state") != std::wstring::npos,
+                "An already completed recovery result follows a later language change.");
+            SetUiLanguage(Language::chinese);
         }
         {
             Fixture test; test.recovery_reads = {Snapshot(60,60,240)};
@@ -117,7 +122,7 @@ int main() {
             error.error = ERROR_GEN_FAILURE; error.detail = L"模拟读取失败"; test.recovery_reads = {error};
             auto result = test.Run(); failed_target(result,RecoveryState::verification_failed);
             check(test.recovery_read_count == 4 && result.after.error == ERROR_GEN_FAILURE,"Transient query errors use the bounded read budget and retain their error.");
-            check(result.detail.find(error.detail) != std::wstring::npos,"Unreadable recovery state is described rather than declared restored.");
+            check(result.detail.Get().find(error.detail.Get()) != std::wstring::npos,"Unreadable recovery state is described rather than declared restored.");
             test = Fixture{}; test.recovery_reads = {error,test.saved};
             result = test.Run(); failed_target(result,RecoveryState::verified);
             check(test.recovery_read_count == 2,"A transient query error may recover on the next read.");
@@ -126,13 +131,13 @@ int main() {
             Fixture test; test.on_target_read = [&](int count) { if (count == 4) test.cancelled = true; };
             auto result = test.Run(); failed_target(result,RecoveryState::cancelled);
             check(test.recovery_calls == 0 && !result.recovery_code,"Cancellation before restoration prevents the native recovery request.");
-            check(result.detail.find(L"未请求恢复") != std::wstring::npos,"Cancellation before submission says recovery was not requested.");
+            check(result.detail.Get().find(L"未请求恢复") != std::wstring::npos,"Cancellation before submission says recovery was not requested.");
         }
         {
             Fixture test; test.on_recovery = [&] { test.cancelled = true; };
             auto result = test.Run(); failed_target(result,RecoveryState::cancelled);
             check(test.recovery_calls == 1 && test.recovery_read_count == 0 && result.recovery_code == 0,"Cancellation after submission retains its code and does not claim verification.");
-            check(result.detail.find(L"未请求恢复") == std::wstring::npos,"An already submitted recovery is not mislabeled as never requested.");
+            check(result.detail.Get().find(L"未请求恢复") == std::wstring::npos,"An already submitted recovery is not mislabeled as never requested.");
         }
         {
             Fixture test; test.recovery_reads = {Snapshot(60,60,240)};

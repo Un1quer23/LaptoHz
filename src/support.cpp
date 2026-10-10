@@ -27,15 +27,23 @@ std::filesystem::path ExecutablePath() {
     if (!count || count >= buffer.size()) throw std::runtime_error("Cannot locate executable.");
     return std::filesystem::path(std::wstring(buffer.data(), count));
 }
-std::wstring NativeError(LONG code) {
+namespace {
+std::wstring NativeErrorFor(LONG code, Language language) {
     LPWSTR buffer = nullptr;
     const DWORD length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-        FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, static_cast<DWORD>(code), 0, reinterpret_cast<LPWSTR>(&buffer), 0, nullptr);
-    std::wstring text = length ? std::wstring(buffer, length) : L"错误代码 " + std::to_wstring(code);
+        FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, static_cast<DWORD>(code),
+        language == Language::english ? MAKELANGID(LANG_ENGLISH,SUBLANG_ENGLISH_US) : MAKELANGID(LANG_CHINESE,SUBLANG_CHINESE_SIMPLIFIED),
+        reinterpret_cast<LPWSTR>(&buffer), 0, nullptr);
+    // If Windows lacks this message translation, retain a readable error code
+    // in the requested language instead of mixing UI languages.
+    std::wstring text = length ? std::wstring(buffer, length) : Localize(Text::error_code,{std::to_wstring(code)}).Get(language);
     if (buffer) LocalFree(buffer);
     while (!text.empty() && (text.back() == L'\r' || text.back() == L'\n' || text.back() == L' ')) text.pop_back();
     return text;
 }
+}
+LocalizedText NativeErrorMessage(LONG code) { return {NativeErrorFor(code,Language::chinese),NativeErrorFor(code,Language::english)}; }
+std::wstring NativeError(LONG code) { return NativeErrorMessage(code).Get(); }
 PowerSource ReadPower() {
     SYSTEM_POWER_STATUS status{};
     if (!GetSystemPowerStatus(&status)) return PowerSource::unknown;
@@ -44,25 +52,26 @@ PowerSource ReadPower() {
     return PowerSource::unknown;
 }
 std::wstring PowerText(PowerSource power) {
-    return power == PowerSource::ac ? L"外部供电" : power == PowerSource::battery ? L"使用电池" : L"电源状态未知";
+    return Tr(power == PowerSource::ac ? Text::power_ac : power == PowerSource::battery ? Text::power_battery : Text::power_unknown);
 }
-std::wstring ReasonText(Reason reason) {
+LocalizedText ReasonMessage(Reason reason) {
     switch (reason) {
-    case Reason::none: return L"";
-    case Reason::paused: return L"自动切换已暂停";
-    case Reason::unknown_power: return L"等待电源状态恢复";
-    case Reason::no_screen: return L"等待内置屏幕启用";
-    case Reason::ambiguous_screen: return L"发现多个内置屏幕，暂不切换";
-    case Reason::remote_session: return L"远程或非活动会话，暂不切换";
-    case Reason::query_failed: return L"暂时无法读取显示状态";
-    case Reason::cloned_source: return L"复制模式暂不切换，请使用扩展或仅内屏模式";
-    case Reason::dynamic_refresh: return L"请先在 Windows 高级显示设置中关闭动态刷新率";
-    case Reason::no_valid_modes: return L"当前没有通过驱动校验的刷新率档位";
-    case Reason::capabilities_changed: return L"显示能力已变化，请按当前档位重新选择";
-    case Reason::unsupported_mode: return L"当前显示模式不支持目标刷新率";
+    case Reason::none: return {};
+    case Reason::paused: return Localize(Text::reason_paused);
+    case Reason::unknown_power: return Localize(Text::reason_power);
+    case Reason::no_screen: return Localize(Text::reason_screen);
+    case Reason::ambiguous_screen: return Localize(Text::reason_ambiguous);
+    case Reason::remote_session: return Localize(Text::reason_remote);
+    case Reason::query_failed: return Localize(Text::reason_query);
+    case Reason::cloned_source: return Localize(Text::reason_clone);
+    case Reason::dynamic_refresh: return Localize(Text::reason_drr);
+    case Reason::no_valid_modes: return Localize(Text::reason_no_rates);
+    case Reason::capabilities_changed: return Localize(Text::reason_capabilities);
+    case Reason::unsupported_mode: return Localize(Text::reason_unsupported);
     }
-    return L"";
+    return {};
 }
+std::wstring ReasonText(Reason reason) { return ReasonMessage(reason).Get(); }
 std::string Utf8(const std::wstring& text) {
     if (text.empty()) return {};
     const int count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
@@ -94,16 +103,16 @@ bool ResolveDiagnosticLogPath(const std::filesystem::path& file, std::filesystem
     const HANDLE handle = CreateFileW(file.c_str(),FILE_READ_ATTRIBUTES,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_FLAG_BACKUP_SEMANTICS,nullptr);
     if (handle == INVALID_HANDLE_VALUE) {
-        error = L"日志文件暂不可用 · " + NativeError(GetLastError()) + L" · " + file.wstring(); return false;
+        error = Tr(Text::log_unavailable) + L" · " + NativeError(GetLastError()) + L" · " + file.wstring(); return false;
     }
     BY_HANDLE_FILE_INFORMATION info{};
     if (!GetFileInformationByHandle(handle,&info)) {
         const DWORD code = GetLastError(); CloseHandle(handle);
-        error = L"无法读取日志文件信息 · " + NativeError(code) + L" · " + file.wstring(); return false;
+        error = Tr(Text::log_info_failed) + L" · " + NativeError(code) + L" · " + file.wstring(); return false;
     }
     if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         CloseHandle(handle);
-        error = L"日志文件暂不可用 · " + file.wstring(); return false;
+        error = Tr(Text::log_unavailable) + L" · " + file.wstring(); return false;
     }
     // AppData can be redirected by the launching application's environment.
     // An external editor needs the actual file path, not our virtualized name.
@@ -113,7 +122,7 @@ bool ResolveDiagnosticLogPath(const std::filesystem::path& file, std::filesystem
     const DWORD code = count ? ERROR_FILENAME_EXCED_RANGE : GetLastError();
     CloseHandle(handle);
     if (!count || count >= buffer.size()) {
-        error = L"无法定位日志的实际路径 · " + NativeError(code) + L" · " + file.wstring(); return false;
+        error = Tr(Text::log_path_failed) + L" · " + NativeError(code) + L" · " + file.wstring(); return false;
     }
     std::wstring value(buffer.data(),count);
     // Ordinary DOS/UNC paths work with more editors. Keep the extended prefix
@@ -129,7 +138,7 @@ bool OpenDiagnosticLog(HWND owner, const std::filesystem::path& file, std::wstri
     if (!ResolveDiagnosticLogPath(file,resolved,error)) return false;
     std::vector<wchar_t> system(32768,L'\0');
     const UINT length = GetSystemDirectoryW(system.data(),static_cast<UINT>(system.size()));
-    if (!length || length >= system.size()) { error = L"无法定位系统记事本 · 日志位置：" + resolved.wstring(); return false; }
+    if (!length || length >= system.size()) { error = Tr(Text::notepad_not_found,{resolved.wstring()}); return false; }
     const auto notepad = std::filesystem::path(std::wstring(system.data(),length)) / L"notepad.exe";
     const auto parameters = L"\"" + resolved.wstring() + L"\"";
     const auto directory = resolved.parent_path().wstring();
@@ -137,7 +146,7 @@ bool OpenDiagnosticLog(HWND owner, const std::filesystem::path& file, std::wstri
     // activation and use the system launcher instead of an App Paths alias.
     const HRESULT apartment = CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
     if (FAILED(apartment) && apartment != RPC_E_CHANGED_MODE) {
-        error = L"记事本启动初始化失败 · " + NativeError(apartment) + L" · 日志位置：" + resolved.wstring(); return false;
+        error = Tr(Text::notepad_init_failed,{NativeError(apartment),resolved.wstring()}); return false;
     }
     SHELLEXECUTEINFOW execute{}; execute.cbSize = sizeof(execute);
     execute.fMask = SEE_MASK_FLAG_NO_UI | SEE_MASK_NOASYNC;
@@ -146,7 +155,7 @@ bool OpenDiagnosticLog(HWND owner, const std::filesystem::path& file, std::wstri
     const bool opened = ShellExecuteExW(&execute) != FALSE;
     const DWORD code = opened ? ERROR_SUCCESS : GetLastError();
     if (SUCCEEDED(apartment)) CoUninitialize();
-    if (!opened) error = L"无法启动系统记事本 · " + NativeError(code) + L" · 日志位置：" + resolved.wstring();
+    if (!opened) error = Tr(Text::notepad_failed,{NativeError(code),resolved.wstring()});
     return opened;
 }
 Logger::Logger(const std::filesystem::path& directory) : file_(directory / L"switcher.log") {}
@@ -175,7 +184,7 @@ bool MarkStartupInitialized(const std::filesystem::path& directory) {
     return WritePrivateProfileStringW(L"App", L"StartupInitialized", L"1", (directory / L"settings.ini").c_str()) != FALSE;
 }
 std::wstring ModeText(Mode mode) {
-    return mode == Mode::automatic ? L"自动模式" : mode == Mode::confirmation ? L"确认模式" : L"手动模式";
+    return Tr(mode == Mode::automatic ? Text::mode_auto : mode == Mode::confirmation ? Text::mode_confirm : Text::mode_manual);
 }
 const wchar_t* ModeName(Mode mode) {
     return mode == Mode::automatic ? L"auto" : mode == Mode::confirmation ? L"confirm" : L"manual";
@@ -193,6 +202,15 @@ Mode LoadMode(const std::filesystem::path& directory) {
 }
 bool SaveMode(const std::filesystem::path& directory, Mode mode) {
     return WritePrivateProfileStringW(L"App", L"Mode", ModeName(mode), (directory / L"settings.ini").c_str()) != FALSE;
+}
+Language LoadLanguage(const std::filesystem::path& directory) {
+    wchar_t value[32]{};
+    GetPrivateProfileStringW(L"App",L"Language",L"system",value,static_cast<DWORD>(std::size(value)),(directory/L"settings.ini").c_str());
+    return ParseLanguage(value).value_or(Language::system);
+}
+bool SaveLanguage(const std::filesystem::path& directory, Language language) {
+    if (language != Language::system && language != Language::chinese && language != Language::english) return false;
+    return WritePrivateProfileStringW(L"App",L"Language",LanguageName(language),(directory/L"settings.ini").c_str()) != FALSE;
 }
 std::optional<int> ParseRefreshTarget(const std::wstring& value) {
     if (value == L"auto") return 0;
@@ -232,7 +250,7 @@ std::wstring CurrentRateText(const Screen& screen) {
     if (screen.virtual_mode_supported && std::isfinite(screen.desktop_hz) && screen.desktop_hz > 1 &&
         std::isfinite(screen.physical_hz) && screen.physical_hz > screen.desktop_hz+0.5 &&
         !RateMatches(screen.nominal_hz,screen.physical_hz,screen.nominal_hz))
-        return format(screen.desktop_hz)+L"（信号 "+format(screen.physical_hz)+L"）";
+        return Tr(Text::signal_rate,{format(screen.desktop_hz),format(screen.physical_hz)});
     if (std::isfinite(screen.physical_hz) && screen.physical_hz > 1 && std::abs(screen.physical_hz-screen.nominal_hz) >= 0.01) {
         std::wostringstream text; text << std::fixed << std::setprecision(2) << screen.physical_hz << L"Hz"; return text.str();
     }

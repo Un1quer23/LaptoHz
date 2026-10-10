@@ -27,6 +27,7 @@ public:
     bool Capture(const std::filesystem::path& path) const;
     bool Visible() const { return hwnd_ && IsWindowVisible(hwnd_); }
     void RefreshAppearance(Appearance appearance);
+    void RefreshLanguage();
 private:
     static LRESULT CALLBACK Procedure(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
     void Paint();

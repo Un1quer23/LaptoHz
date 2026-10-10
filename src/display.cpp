@@ -45,16 +45,16 @@ std::optional<bool> AdvancedColor(const DISPLAYCONFIG_PATH_INFO& path) {
     if (DisplayConfigGetDeviceInfo(&color.header) != ERROR_SUCCESS) return std::nullopt;
     return (color.flags & 2) != 0;
 }
-std::wstring ChangeError(LONG code) {
+LocalizedText ChangeError(LONG code) {
     switch (code) {
-    case DISP_CHANGE_SUCCESSFUL: return L"成功";
-    case DISP_CHANGE_RESTART: return L"驱动要求重新启动，未进行自动切换";
-    case DISP_CHANGE_BADMODE: return L"驱动不支持目标模式";
-    case DISP_CHANGE_FAILED: return L"显示驱动暂时无法切换";
-    case DISP_CHANGE_BADPARAM: return L"显示参数无效";
-    case DISP_CHANGE_BADFLAGS: return L"显示参数标志无效";
-    case DISP_CHANGE_BADDUALVIEW: return L"当前多屏模式不支持独立切换";
-    default: return L"显示接口返回 " + std::to_wstring(code);
+    case DISP_CHANGE_SUCCESSFUL: return Localize(Text::change_success);
+    case DISP_CHANGE_RESTART: return Localize(Text::change_restart);
+    case DISP_CHANGE_BADMODE: return Localize(Text::change_bad_mode);
+    case DISP_CHANGE_FAILED: return Localize(Text::change_failed);
+    case DISP_CHANGE_BADPARAM: return Localize(Text::change_bad_param);
+    case DISP_CHANGE_BADFLAGS: return Localize(Text::change_bad_flags);
+    case DISP_CHANGE_BADDUALVIEW: return Localize(Text::change_dual_view);
+    default: return Localize(Text::change_code,{std::to_wstring(code)});
     }
 }
 DEVMODEW TargetMode(const DisplaySnapshot& snapshot, int hz) {
@@ -116,13 +116,12 @@ bool OriginalModeRestored(const DisplaySnapshot& before, const DisplaySnapshot& 
     return RateMatches(old_desktop,original.physical_hz,desktop_label) &&
            RateMatches(new_desktop,observed.physical_hz,desktop_label);
 }
-std::wstring ObservedState(const DisplaySnapshot& snapshot) {
+std::wstring Number(double value) { std::wostringstream text; text << value; return text.str(); }
+LocalizedText ObservedState(const DisplaySnapshot& snapshot) {
     if (snapshot.policy.availability != Availability::ready || !snapshot.policy.screen)
-        return snapshot.detail.empty() ? L"当前显示状态不可读" : snapshot.detail;
+        return snapshot.detail.empty() ? Localize(Text::status_unreadable) : snapshot.detail;
     const auto& screen = *snapshot.policy.screen;
-    std::wostringstream text;
-    text << L"当前标称 " << screen.nominal_hz << L"Hz，桌面 " << screen.desktop_hz << L"Hz，信号 " << screen.physical_hz << L"Hz";
-    return text.str();
+    return Localize(Text::observed_state,{std::to_wstring(screen.nominal_hz),Number(screen.desktop_hz),Number(screen.physical_hz)});
 }
 std::wstring FirmwareString(const unsigned char* begin, const unsigned char* end, unsigned int index) {
     if (!index) return L"";
@@ -169,17 +168,18 @@ std::pair<std::wstring,std::wstring> ComputerIdentity() {
     return {};
 }
 }
-std::wstring RecoveryStateText(RecoveryState state) {
+LocalizedText RecoveryMessage(RecoveryState state) {
     switch (state) {
-    case RecoveryState::not_needed: return L"无需恢复";
-    case RecoveryState::verified: return L"已恢复原显示状态并验证";
-    case RecoveryState::request_failed: return L"恢复原显示状态的请求失败";
-    case RecoveryState::verification_failed: return L"恢复请求已提交，回读未通过验证";
-    case RecoveryState::cancelled: return L"操作已取消，恢复结果未验证";
-    case RecoveryState::environment_changed: return L"显示环境已变化或不可确认，恢复结果未验证";
+    case RecoveryState::not_needed: return Localize(Text::recovery_none);
+    case RecoveryState::verified: return Localize(Text::recovery_verified);
+    case RecoveryState::request_failed: return Localize(Text::recovery_request_failed);
+    case RecoveryState::verification_failed: return Localize(Text::recovery_verification_failed);
+    case RecoveryState::cancelled: return Localize(Text::recovery_cancelled);
+    case RecoveryState::environment_changed: return Localize(Text::recovery_environment);
     }
-    return L"恢复结果未知";
+    return Localize(Text::recovery_unknown);
 }
+std::wstring RecoveryStateText(RecoveryState state) { return RecoveryMessage(state).Get(); }
 LONG DisplayBackend::ChangeSettings(const std::wstring& device, DEVMODEW mode, DWORD flags) const {
     return services_.change_settings ? services_.change_settings(device,mode,flags) :
         ChangeDisplaySettingsExW(device.c_str(),&mode,nullptr,flags,nullptr);
@@ -193,7 +193,7 @@ DisplaySnapshot DisplayBackend::Inspect() const {
     result.policy.power = ReadPower();
     if (GetSystemMetrics(SM_REMOTESESSION)) {
         result.policy.availability = Availability::remote;
-        result.detail = ReasonText(Reason::remote_session);
+        result.detail = ReasonMessage(Reason::remote_session);
         return result;
     }
     std::vector<DISPLAYCONFIG_PATH_INFO> paths;
@@ -212,7 +212,7 @@ DisplaySnapshot DisplayBackend::Inspect() const {
     if (rc != ERROR_SUCCESS) {
         result.policy.availability = rc == ERROR_ACCESS_DENIED ? Availability::remote : Availability::error;
         result.error = rc;
-        result.detail = NativeError(rc);
+        result.detail = NativeErrorMessage(rc);
         return result;
     }
     std::vector<size_t> internal;
@@ -245,7 +245,7 @@ DisplaySnapshot DisplayBackend::Inspect() const {
     source_name.header = {DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, sizeof(source_name), path.sourceInfo.adapterId, path.sourceInfo.id};
     rc = DisplayConfigGetDeviceInfo(&source_name.header);
     if (rc != ERROR_SUCCESS) {
-        result.policy.availability = Availability::error; result.error = rc; result.detail = NativeError(rc); return result;
+        result.policy.availability = Availability::error; result.error = rc; result.detail = NativeErrorMessage(rc); return result;
     }
     result.device = source_name.viewGdiDeviceName;
     DISPLAYCONFIG_TARGET_DEVICE_NAME target_name{};
@@ -254,7 +254,7 @@ DisplaySnapshot DisplayBackend::Inspect() const {
     result.current.dmSize = sizeof(result.current);
     if (!EnumDisplaySettingsExW(result.device.c_str(), ENUM_CURRENT_SETTINGS, &result.current, 0)) {
         result.policy.availability = Availability::error; result.error = ERROR_GEN_FAILURE;
-        result.detail = L"无法读取内置屏幕的当前显示模式"; return result;
+        result.detail = Localize(Text::display_mode_unreadable); return result;
     }
     Screen screen;
     screen.cloned = std::count_if(paths.begin(), paths.end(), [&](const auto& p) {
@@ -300,7 +300,7 @@ DisplaySnapshot DisplayBackend::Inspect() const {
     result.policy.availability = physical_modes.available ? Availability::ready : Availability::error;
     if (!physical_modes.available) {
         result.error = physical_modes.error;
-        result.detail = L"无法读取内屏的物理刷新率能力，暂不提供切换";
+        result.detail = Localize(Text::physical_rates_unreadable);
     }
     return result;
 }
@@ -318,9 +318,9 @@ ApplyResult DisplayBackend::Apply(const DisplaySnapshot& snapshot, int hz, const
     result.after = Inspect();
     auto& before = result.after;
     if (!snapshot.policy.screen || !before.policy.screen || CapabilityKey(before.policy) != CapabilityKey(snapshot.policy)) {
-        result.detail = ReasonText(Reason::capabilities_changed); result.code = DISP_CHANGE_BADMODE; return result;
+        result.detail = ReasonMessage(Reason::capabilities_changed); result.code = DISP_CHANGE_BADMODE; return result;
     }
-    if (cancelled()) { result.detail = L"操作已取消"; return result; }
+    if (cancelled()) { result.detail = Localize(Text::operation_cancelled); return result; }
     result.code = Validate(before, hz);
     if (result.code != DISP_CHANGE_SUCCESSFUL) {
         result.detail = ChangeError(result.code); result.retryable = result.code == DISP_CHANGE_FAILED; return result;
@@ -330,7 +330,7 @@ ApplyResult DisplayBackend::Apply(const DisplaySnapshot& snapshot, int hz, const
     }
     const DisplaySnapshot saved = before;
     auto mode = TargetMode(saved, hz);
-    if (cancelled()) { result.detail = L"操作已取消"; return result; }
+    if (cancelled()) { result.detail = Localize(Text::operation_cancelled); return result; }
     result.code = ChangeSettings(saved.device,mode,0);
     if (result.code != DISP_CHANGE_SUCCESSFUL) {
         result.detail = ChangeError(result.code); result.retryable = result.code == DISP_CHANGE_FAILED;
@@ -346,28 +346,26 @@ ApplyResult DisplayBackend::Apply(const DisplaySnapshot& snapshot, int hz, const
             RateMatches(*result.after.policy.screen,hz) &&
             RateMatches(result.after.policy.screen->nominal_hz,result.after.policy.screen->physical_hz,hz) &&
             SameSurroundings(saved, result.after)) {
-            result.success = true; result.changed = true; result.detail = L"刷新率已切换并验证"; return result;
+            result.success = true; result.changed = true; result.detail = Localize(Text::switched_verified); return result;
         }
     }
-    result.detail = L"切换后的显示状态未通过验证";
+    result.detail = Localize(Text::switch_verification_failed);
     if (result.after.policy.screen && result.after.policy.screen->route == saved.policy.screen->route &&
         !RateMatches(*result.after.policy.screen,hz)) {
         const auto& observed = *result.after.policy.screen;
-        std::wostringstream text;
-        text << L"刷新率回读不符（目标 " << hz << L"Hz，标称 " << observed.nominal_hz << L"Hz，桌面 "
-             << observed.desktop_hz << L"Hz，信号 " << observed.physical_hz << L"Hz）";
-        result.detail = text.str();
+        result.detail = Localize(Text::rate_mismatch,{std::to_wstring(hz),std::to_wstring(observed.nominal_hz),
+            Number(observed.desktop_hz),Number(observed.physical_hz)});
     }
     const auto finish = [&](RecoveryState state) {
         result.recovery = state;
         const auto target_detail = result.detail;
-        result.detail = RecoveryStateText(state);
+        result.detail = RecoveryMessage(state);
         if (state == RecoveryState::request_failed)
-            result.detail += L"（"+ChangeError(*result.recovery_code)+L"，返回码 "+std::to_wstring(*result.recovery_code)+L"）";
+            result.detail += Localize(Text::recovery_code,{ChangeError(*result.recovery_code),std::to_wstring(*result.recovery_code)});
         if (!result.recovery_code && (state == RecoveryState::cancelled || state == RecoveryState::environment_changed))
-            result.detail += L"，未请求恢复";
+            result.detail += Localize(Text::recovery_not_requested);
         result.detail += L"\n"+target_detail;
-        if (state != RecoveryState::verified) result.detail += L"；"+ObservedState(result.after);
+        if (state != RecoveryState::verified) result.detail += Localize(Text::detail_separator)+ObservedState(result.after);
         return result;
     };
     // Submit the original mode only once, while its source and capabilities are
@@ -430,11 +428,11 @@ std::string DiagnosticJson(const DisplaySnapshot& snapshot, const DisplayBackend
         if (i) out << ',';
         const auto& rate = snapshot.rate_validations[i];
         const auto origin = rate.origin == ModeOrigin::physical ? L"physical" : rate.origin == ModeOrigin::virtual_rate ? L"virtual" : L"unverified";
-        const auto detail = rate.tested ? ChangeError(rate.code) : rate.origin == ModeOrigin::virtual_rate ? L"虚拟桌面刷新率，未列为屏幕物理档位" :
-            rate.origin == ModeOrigin::unverified ? L"无法确认此档位为当前显示参数下的物理刷新率" :
-            ReasonText(snapshot.policy.screen && snapshot.policy.screen->cloned ? Reason::cloned_source : Reason::dynamic_refresh);
+        const auto detail = rate.tested ? ChangeError(rate.code) : rate.origin == ModeOrigin::virtual_rate ? Localize(Text::virtual_rate_detail) :
+            rate.origin == ModeOrigin::unverified ? Localize(Text::unverified_rate_detail) :
+            ReasonMessage(snapshot.policy.screen && snapshot.policy.screen->cloned ? Reason::cloned_source : Reason::dynamic_refresh);
         out << "{\"hz\":" << rate.hz << ",\"code\":" << rate.code << ",\"tested\":" << (rate.tested ? "true" : "false") << ",\"available\":"
-            << (rate.code == DISP_CHANGE_SUCCESSFUL ? "true" : "false") << ",\"origin\":" << JsonString(origin) << ",\"detail\":" << JsonString(detail) << "}";
+            << (rate.code == DISP_CHANGE_SUCCESSFUL ? "true" : "false") << ",\"origin\":" << JsonString(origin) << ",\"detail\":" << JsonString(detail.Get()) << "}";
     }
     out << ']';
     if (snapshot.policy.screen) {
@@ -448,7 +446,7 @@ std::string DiagnosticJson(const DisplaySnapshot& snapshot, const DisplayBackend
         out << "],\n  \"validation60\": " << backend.Validate(snapshot, 60)
             << ",\n  \"validation240\": " << backend.Validate(snapshot, 240);
     }
-    out << ",\n  \"error\": " << snapshot.error << ",\n  \"detail\": " << JsonString(snapshot.detail) << "\n}\n";
+    out << ",\n  \"error\": " << snapshot.error << ",\n  \"detail\": " << JsonString(snapshot.detail.Get()) << "\n}\n";
     return out.str();
 }
 }
